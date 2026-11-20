@@ -4,8 +4,9 @@ Two independent 3-phase BLDC bridges on one compact board, driven by one
 on-board ATmega328P (the Nano's chip, so the Nano firmware runs unchanged).
 Replaces the single-motor, through-hole v1.1 board for this use.
 
-**Status:** schematic-level spec, BOM and firmware. Not yet drawn in KiCad and
-not laid out or built. Part numbers marked "example" must be checked against
+**Status:** schematic drawn in KiCad (ERC clean). PCB created and partly placed,
+not routed: the four bulk caps and J1/J2 do not fit in 30 x 25 mm (see "PCB
+status" below). Not built. Part numbers marked "example" must be checked against
 their datasheets before ordering.
 
 ## Targets
@@ -177,5 +178,40 @@ been compiled with avr-gcc or run on a Nano.
   a garbled extraction of DS22049F Table 3-1, so **confirm them in KiCad**.
   BSZ019N03LS (1-3 S, 4 G, 5-8 D) is the standard Infineon TSDSON-8 FL
   assignment, but **its datasheet was not readable here**.
-- The MOSFET footprint name (`Infineon_PG-TSDSON-8_FL`) is a placeholder.
-  Assign the real KiCad footprint before Update PCB.
+- MCP1703A SOT-23 pins (1 GND, 2 VOUT, 3 VIN) match KiCad's own
+  `MCP1703Ax-500xxTT` symbol.
+- KiCad ships no Infineon TSDSON-8 FL footprint. `kicad/OpenESC_dual.pretty/
+  Infineon_PG-TSDSON-8_FL_3.3x3.3mm_P0.65mm` copies KiCad's
+  Diodes_PowerDI3333-8 copper (same 3.3 x 3.3 mm body, 0.65 mm pitch,
+  1-3 S / 4 G / 5-8 D) and adds pads 6-8 on the drain fingers. **Check it
+  against Infineon's recommended land pattern before fab.**
+- P1 (battery) uses `OpenESC_dual:Battery_Pads_2x_4.0x9.5mm`, two 4 x 9.5 mm
+  SMD pads. The old 4 x 4 mm test-point footprint had only one pad, so GND had
+  nowhere to land.
+- `draw_schematic.py` also writes `OpenESC_dual.kicad_sym` and the project
+  `sym-lib-table` / `fp-lib-table`, and puts PWR_FLAGs on VBAT and GND.
+
+## PCB status (tools/build_pcb.py)
+
+`tools/build_pcb.py` is "Update PCB from Schematic", scripted. Run it with
+KiCad's Python (`"C:/Program Files/KiCad/10.0/bin/python.exe" tools/build_pcb.py`).
+It exports the netlist, loads and links every footprint, assigns the 61 nets,
+draws the 30 x 25 mm outline, sets 2 layers with 2 oz (70 um) copper and
+places the parts. It overwrites `kicad/dual_esc.kicad_pcb`.
+
+- **Top:** battery pads on the left short edge. M1 A/B/C phase pads on the top
+  long edge and M2 on the bottom one. Each half-bridge is a column with the
+  high side left and the low side right, its 10 uF 1206 just inboard.
+- **Bottom:** U1 and U2 under their motor's bridges, with gate and pull-down
+  resistors toward the FETs, bootstrap caps beside them and GVDD caps at
+  pin 7. U3 sits with the resonator, decoupling and LDO under the battery
+  pads. J3 and J4 are on the right short edge.
+- **Does not fit (parked beside the board):** C17-C20, the 4 x 220 uF
+  CP_Elec_6.3x7.7 caps. Each courtyard is 9.5 x 7.2 mm, 273 mm2 in all, and
+  the top face has only a ~2.4 x 25 mm strip left. J1 (through-hole 1.27 mm
+  header) and J2 (TC2030, 3 NPTH alignment holes) both need holes through a
+  top face that is fully populated.
+- DRC on the placed parts shows no courtyard or clearance errors. It is not
+  routed, so 205 connections are still unconnected.
+- Renders: `kicad/render_top.png`, `kicad/render_bottom.png`. Placement with
+  courtyards: `kicad/placement_top.png`, `kicad/placement_bottom_mirrored.png`.

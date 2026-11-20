@@ -79,6 +79,7 @@ FP = dict(
  c0805="Capacitor_SMD:C_0805_2012Metric", c1206="Capacitor_SMD:C_1206_3216Metric",
  cp8="Capacitor_SMD:CP_Elec_6.3x7.7",
  pad4="TestPoint:TestPoint_Pad_4.0x4.0mm",
+ batt="OpenESC_dual:Battery_Pads_2x_4.0x9.5mm",   # P1 has 2 pins; pad4 has only one pad
  jst3="Connector_JST:JST_SH_SM03B-SRSS-TB_1x03-1MP_P1.00mm_Horizontal",
  hdr6="Connector_PinHeader_1.27mm:PinHeader_1x06_P1.27mm_Vertical",
  tc2030="Connector:Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical",
@@ -146,7 +147,7 @@ add("J1","Conn_6","Serial","hdr6",{"1":"GND","2":"GND","3":"+5V","4":"RXD","5":"
 add("J2","Conn_6","ISP","tc2030",{"1":"M2_INLB","2":"+5V","3":"SCK","4":"M1_INHC","5":"~RESET","6":"GND"})
 add("J3","Conn_3","Speed M1","jst3",{"1":"+5V","2":"M1_SPD","3":"GND"})
 add("J4","Conn_3","Speed M2","jst3",{"1":"+5V","2":"M2_SPD","3":"GND"})
-add("P1","Conn_2","Battery","pad4",{"1":"VBAT","2":"GND"})
+add("P1","Conn_2","Battery","batt",{"1":"VBAT","2":"GND"})
 
 # ---------------------------------------------------------------- writer
 G = 2.54
