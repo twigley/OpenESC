@@ -1,6 +1,6 @@
 Ref,Qty,Value,Part number (example),Footprint,Notes
 U1 U2,2,3-phase half-bridge gate driver,TI DRV8300DPWR,TSSOP-20 (PW),"D variant = integrated bootstrap diodes, non-inverted INLx, fixed ~200 ns dead time; GVDD 5-20 V"
-Q1-Q12,12,"N-MOSFET 40 V, logic level",Infineon BSC014N04LSATMA1,TDSON-8 / SuperSO8 5x6 mm,"Must have RDS(on) specified at VGS=4.5 V: high-side gate only gets ~VBAT-0.85 V. Verify Qg against bootstrap cap"
+Q1-Q12,12,"N-MOSFET 30-40 V, logic level","Infineon BSC014N04LSATMA1 (5x6, enclosed) or a 30 V 3.3x3.3 part (airflow)","TDSON-8 5x6 mm or PQFN 3.3x3.3 mm","Must have RDS(on) specified at VGS=4.5 V: high-side gate only gets ~VBAT-0.85 V. Verify Qg against bootstrap cap"
 C1-C6,6,220 nF 25 V X7R,generic,0603,Bootstrap BSTx-SHx; DRV8300D max 1 uF
 C7 C8,2,10 uF 25 V X7R,generic,0805,GVDD bypass (datasheet: >=10 uF)
 C9 C10,2,100 nF 25 V X7R,generic,0402/0603,GVDD HF bypass at pin 7
@@ -8,9 +8,16 @@ C11-C16,6,10 uF 25 V X7R,generic,1206,"Bus decoupling, one at each half-bridge (
 C17-C20,4,330 uF 16 V low-ESR,polymer or electrolytic,8 mm can SMD,"Bulk, two per bridge (rating >= 2x 8.4 V)"
 R1-R12,12,10 R,generic,0402,Gate series resistors (datasheet curves use 15 R; tune on scope)
 R13-R24,12,10 k,generic,0402,Gate-source pull-down on every MOSFET
-J1,1,Nano header 1x15 female,generic,2.54 mm THT,Arduino Nano socket side 1
-J2,1,Nano header 1x15 female,generic,2.54 mm THT,Arduino Nano socket side 2
-J3 J4,2,3-pin header (5V / wiper / GND),JST-SH or 2.54 mm,SMD/THT,Speed pots for motor 1 (A1) and motor 2 (A2)
+J3 J4,2,3-pin header (5V / wiper / GND),JST-SH or 2.54 mm,SMD/THT,Speed pots motor 1 (PC1/A1) and motor 2 (PC2/A2); pads to save space
 P1,1,Battery input pads,XT30/XT60 lead,2x solder pad,14 AWG; 40 A total for both motors
 P2-P7,6,Motor phase pads,-,solder pad,"M1 A/B/C, M2 A/B/C; 16 AWG"
--,1,Arduino Nano (ATmega328P),-,module,Plugs into J1/J2; not soldered
+U3,1,ATmega328P,Microchip ATmega328P-MU,QFN-32 5x5 mm,"Same chip as the Nano, so the firmware is unchanged"
+Y1,1,16 MHz ceramic resonator with built-in caps,e.g. Murata CSTNE16M0V53Z000R0 (verify),3.2x1.3 mm SMD,PB6/PB7
+U4,1,5 V LDO,e.g. Microchip MCP1703AT-5002E/CB (verify),SOT-23,VBAT to +5V; 16 V max input
+C21-C22,2,1 uF 25 V X7R,generic,0603,LDO in/out
+C23-C26,4,100 nF X7R,generic,0402,"MCU VCC x2, AVCC, AREF"
+C27,1,10 uF 10 V X7R,generic,0603,+5V bulk
+C28,1,100 nF X7R,generic,0402,DTR to RESET auto-reset
+R25,1,10 k,generic,0402,RESET pull-up
+J1,1,6-pin serial header (GND CTS 5V RX TX DTR),generic,1.27 or 2.54 mm / pads,USB-serial adapter for uploads
+J2,1,ISP pads 2x3,Tag-Connect TC2030 footprint or 2.54 mm,pads,Bootloader burn once; battery disconnected
