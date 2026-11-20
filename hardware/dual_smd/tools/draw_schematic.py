@@ -249,10 +249,10 @@ def mcu(MX, MY):
         wire((L, r(row)), (L - 2, r(row)))
     wire((L - 2, r(23)), (L - 2, r(27))); pwr("GND", L - 2, r(27))
     # decoupling, one per supply pin
-    for j, c in enumerate(("C23", "C24", "C25", "C27")):
+    for j, c in enumerate(("C23", "C24", "C25")):
         x = MX - 36 + 4 * j
         pwr("+5V", x, r(19)); wire((x, r(19)), (x, r(20))); place(c, "C_V", x, r(21)); wire((x, r(22)), (x, r(23))); pwr("GND", x, r(23))
-    text("Decoupling at U3 pins 4, 6, 18 and +5 V bulk", MX - 37, r(17), 1.27)
+    text("Decoupling at U3 pins 4, 6, 18", MX - 37, r(17), 1.27)
     # signal pins -> global labels
     nets = SPEC["U3"][4]
     for row, num, nm, _ in MCU_RIGHT:

@@ -56,6 +56,8 @@ for a, b in segs:                       # wire endpoint landing on another wire
         for w in on_wire(e): join(("pt", e), ("pt", w))
 
 pin_nodes = {}; errs = []
+refs = [[p[2] for p in find(s, "property") if p[1] == "Reference"][0] for s in find(root, "symbol")]
+errs += [f"reference {r} used more than once" for r in sorted({r for r in refs if refs.count(r) > 1})]
 for s in find(root, "symbol"):
     lib = find(s, "lib_id")[0][1]; at = find(s, "at")[0]; X, Y = float(at[1]), float(at[2])
     assert at[3] == "0", "rotation not modelled"
