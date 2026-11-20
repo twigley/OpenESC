@@ -190,46 +190,64 @@ def lib_symbol(name):
     lines.append("))")
     return "\n".join(lines)
 
+BLOCKS = [  # (title, origin x, origin y, width, height, refs)
+ ("Battery input and 5 V supply",  20, 30, 230, 120, ["P1","C17","C18","C19","C20","U4","C21","C22","C27"]),
+ ("Microcontroller and programming", 270, 30, 330, 250, ["U3","Y1","C23","C24","C25","C26","R25","C28","J1","J2","J3","J4"]),
+ ("Motor 1 gate driver",            20, 170, 230, 190, ["U1","C7","C9","C1","C2","C3"]+[f"R{i}" for i in range(1,7)]+[f"R{i}" for i in range(13,19)]),
+ ("Motor 1 power stage",            20, 380, 380, 190, [f"Q{i}" for i in range(1,7)]+["C11","C12","C13","P2","P3","P4"]),
+ ("Motor 2 gate driver",           615, 30, 215, 250, ["U2","C8","C10","C4","C5","C6"]+[f"R{i}" for i in range(7,13)]+[f"R{i}" for i in range(19,25)]),
+ ("Motor 2 power stage",           420, 380, 400, 190, [f"Q{i}" for i in range(7,13)]+["C14","C15","C16","P5","P6","P7"]),
+]
+STUB = 2*G      # visible wire from each pin to its net label
+LABEL_ROOM = 22.86
+
 def main():
     root = uid("root")
-    # resolve LDO placeholder pin numbers
     SYMBOLS["LDO_SOT23"]["pins"] = [(LDO_PINS[n], n, et, sd) for (_, n, et, sd) in SYMBOLS["LDO_SOT23"]["pins"]]
     body = []; nets = {}
-    # layout: groups in columns
-    order = sorted(PARTS, key=lambda p: (p[1] not in ("ATmega328P-MU","DRV8300DPWR","LDO_SOT23","Resonator_3pin"), p[0][0], int(''.join(c for c in p[0] if c.isdigit()))))
-    x0, y0 = 30*G, 20*G; col_x = x0; y = y0; col_w = 0; maxy = 260
-    for ref, sym, val, fp, pins, mpn in order:
-        w,h,pos = sym_geom(sym)
-        if y + h > maxy:
-            col_x += col_w + 30*G; y = y0; col_w = 0
-        cx = col_x; cy = y + h/2 + 2*G
-        cx = round(cx/G)*G; cy = round(cy/G)*G
-        col_w = max(col_w, w); y = cy + h/2 + 3*G
-        props = [("Reference",ref,(cx, cy-h/2-1.27),False),("Value",val,(cx, cy+h/2+1.27),False),
-                 ("Footprint",fp,(cx,cy),True),("Datasheet","",(cx,cy),True),("Description","",(cx,cy),True)]
-        if mpn: props.append(("MPN",mpn,(cx,cy),True))
-        pl = [f'(symbol (lib_id "{LIB}:{sym}") (at {fmt(cx)} {fmt(cy)} 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "{uid("sym",ref)}")']
-        for k,v,(px,py),hid in props:
-            pl.append(f'(property "{k}" "{v}" (at {fmt(px)} {fmt(py)} 0) (effects (font (size 1.27 1.27)){" hide" if hid else ""}))')
-        for num,_,_,_ in SYMBOLS[sym]["pins"]:
-            pl.append(f'(pin "{num}" (uuid "{uid("pin",ref,num)}"))')
-        pl.append(f'(instances (project "{PROJECT}" (path "/{root}" (reference "{ref}") (unit 1)))))')
-        body.append("\n".join(pl))
-        done=set()
-        for num,nm,et,side in SYMBOLS[sym]["pins"]:
-            px,py = pos[num]; ax, ay = cx+px, cy-py
-            net = pins.get(num, "__MISSING__")
-            assert net != "__MISSING__", f"{ref} pin {num} has no net entry"
-            nets.setdefault(net, []).append(f"{ref}.{num}")
-            if (ax,ay) in done: continue
-            done.add((ax,ay))
-            if net is None:
-                body.append(f'(no_connect (at {fmt(ax)} {fmt(ay)}) (uuid "{uid("nc",ref,num)}"))')
-            else:
+    byref = {p[0]: p for p in PARTS}
+    placed = [r for blk in BLOCKS for r in blk[5]]
+    assert sorted(placed) == sorted(byref), f"block assignment mismatch: {set(byref) ^ set(placed)}"
+    snap = lambda v: round(v / G) * G
+    for title, bx, by, bw, bh, refs in BLOCKS:
+        body.append(f'(text "{title}" (exclude_from_sim no) (at {fmt(snap(bx))} {fmt(snap(by-5))} 0) (effects (font (size 3 3) (thickness 0.6) bold) (justify left bottom)) (uuid "{uid("title",title)}"))')
+        body.append(f'(rectangle (start {fmt(snap(bx-5))} {fmt(snap(by-12))}) (end {fmt(snap(bx+bw))} {fmt(snap(by+bh))}) (stroke (width 0.3) (type dash)) (fill (type none)) (uuid "{uid("box",title)}"))')
+        col_x = bx; y = by; col_w = 0
+        for ref in refs:
+            _, sym, val, fp, pins, mpn = byref[ref]
+            w, h, pos = sym_geom(sym)
+            span = w + 2*(G + STUB + LABEL_ROOM)
+            if y + h + 8 > by + bh:
+                col_x += col_w + 6; y = by; col_w = 0
+            cx = snap(col_x + span/2); cy = snap(y + h/2 + 3*G)
+            col_w = max(col_w, span); y = cy + h/2 + 4*G
+            props = [("Reference",ref,(cx, cy-h/2-1.27),False),("Value",val,(cx, cy+h/2+1.27),False),
+                     ("Footprint",fp,(cx,cy),True),("Datasheet","",(cx,cy),True),("Description","",(cx,cy),True)]
+            if mpn: props.append(("MPN",mpn,(cx,cy),True))
+            pl = [f'(symbol (lib_id "{LIB}:{sym}") (at {fmt(cx)} {fmt(cy)} 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "{uid("sym",ref)}")']
+            for k,v,(px,py),hid in props:
+                pl.append(f'(property "{k}" "{v}" (at {fmt(px)} {fmt(py)} 0) (effects (font (size 1.27 1.27)){" hide" if hid else ""}))')
+            for num,_,_,_ in SYMBOLS[sym]["pins"]:
+                pl.append(f'(pin "{num}" (uuid "{uid("pin",ref,num)}"))')
+            pl.append(f'(instances (project "{PROJECT}" (path "/{root}" (reference "{ref}") (unit 1)))))')
+            body.append("\n".join(pl))
+            done=set()
+            for num,nm,et,side in SYMBOLS[sym]["pins"]:
+                px,py = pos[num]; ax, ay = cx+px, cy-py
+                net = pins.get(num, "__MISSING__")
+                assert net != "__MISSING__", f"{ref} pin {num} has no net entry"
+                nets.setdefault(net, []).append(f"{ref}.{num}")
+                if (ax,ay) in done: continue
+                done.add((ax,ay))
+                if net is None:
+                    body.append(f'(no_connect (at {fmt(ax)} {fmt(ay)}) (uuid "{uid("nc",ref,num)}"))')
+                    continue
+                ex = ax - STUB if side == "L" else ax + STUB
+                body.append(f'(wire (pts (xy {fmt(ax)} {fmt(ay)}) (xy {fmt(ex)} {fmt(ay)})) (stroke (width 0) (type default)) (uuid "{uid("w",ref,num)}"))')
                 ang, just = (180,"right") if side=="L" else (0,"left")
-                body.append(f'(label "{net}" (at {fmt(ax)} {fmt(ay)} {ang}) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify {just} bottom)) (uuid "{uid("lbl",ref,num)}"))')
-        extra = set(pins) - {p[0] for p in SYMBOLS[sym]["pins"]}
-        assert not extra, f"{ref}: nets on unknown pins {extra}"
+                body.append(f'(label "{net}" (at {fmt(ex)} {fmt(ay)} {ang}) (fields_autoplaced yes) (effects (font (size 1.27 1.27)) (justify {just} bottom)) (uuid "{uid("lbl",ref,num)}"))')
+            extra = set(pins) - {p[0] for p in SYMBOLS[sym]["pins"]}
+            assert not extra, f"{ref}: nets on unknown pins {extra}"
     used = sorted({p[1] for p in PARTS})
     sch = [f'(kicad_sch (version 20231120) (generator "eeschema") (generator_version "8.0") (uuid "{root}") (paper "A1")',
            '(title_block (title "OpenESC dual-motor SMD ESC") (rev "0.1") (comment 1 "Generated by hardware/dual_smd/tools/gen_schematic.py - edit the script, not this file"))',

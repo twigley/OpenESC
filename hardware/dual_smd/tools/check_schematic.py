@@ -32,17 +32,28 @@ labels={}
 for l in find(root,"label"):
     at=find(l,"at")[0]; labels.setdefault((round(float(at[1]),3),round(float(at[2]),3)),[]).append(l[1])
 ncs={(round(float(find(n,"at")[0][1]),3),round(float(find(n,"at")[0][2]),3)) for n in find(root,"no_connect")}
-got={}; used=set(); errs=[]
+# follow wires: map each wire endpoint to the other end (stubs are single segments)
+wire_to={}
+for w in find(root,"wire"):
+    a,b=[(round(float(x[1]),3),round(float(x[2]),3)) for x in find(find(w,"pts")[0],"xy")]
+    wire_to[a]=b; wire_to[b]=a
+got={}; used=set(); errs=[]; boxes=[]
 for s in find(root,"symbol"):
     lib=find(s,"lib_id")[0][1]; at=find(s,"at")[0]; X,Y=float(at[1]),float(at[2])
     ref=[p[2] for p in find(s,"property") if p[1]=="Reference"][0]
+    xs=[px for px,py in libs[lib].values()]; ys=[py for px,py in libs[lib].values()]
+    boxes.append((ref,X+min(xs)-28,Y-max(ys)-3,X+max(xs)+28,Y-min(ys)+3))
     for num,(px,py) in libs[lib].items():
         k=(round(X+px,3),round(Y-py,3))
+        if k in wire_to: used.add(k); k=wire_to[k]
         if k in labels:
             if len(set(labels[k]))>1: errs.append(f"{ref}.{num} has conflicting labels {labels[k]}")
             got.setdefault(labels[k][0],set()).add(f"{ref}.{num}"); used.add(k)
         elif k in ncs: got.setdefault(None,set()).add(f"{ref}.{num}"); used.add(k)
         else: errs.append(f"{ref}.{num} unconnected")
+for i,a in enumerate(boxes):
+    for b in boxes[i+1:]:
+        if a[1]<b[3] and b[1]<a[3] and a[2]<b[4] and b[2]<a[4]: errs.append(f"overlap {a[0]} / {b[0]}")
 floating=set(labels)-used
 if floating: errs.append(f"{len(floating)} floating labels")
 want={}
