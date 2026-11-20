@@ -19,6 +19,7 @@ their datasheets before ordering.
 | Size | As small as possible, surface mount. Estimate about 30 x 25 mm with 3.3 x 3.3 mm MOSFETs, or 35 x 30 mm with 5 x 6 mm | Tom |
 | Use | Dual-motor fixed wing. Some airflow, 20 A as peaks, not continuous | Tom |
 | MOSFET package | 3.3 x 3.3 mm (BSZ019N03LS), giving a board of about 30 x 25 mm | chosen from the use |
+| Board size | 30 x 25 mm target. To fit, bulk caps went to 4 x 220 uF 16 V in 6.3 mm cans (was 330 uF 8 mm), and the serial header became bare 1.27 mm pads | Tom, 2026-11-20 |
 
 ## Why the IR2110 has to go
 
@@ -105,7 +106,8 @@ against the Microchip ATmega328P datasheet before capture.**
 | 26 | PC3 (A3) | U2 INLC |
 
 **Programming:**
-- 6-pin serial header (GND, CTS/NC, 5V, RX, TX, DTR) for a USB-serial adapter
+- 6 bare pads at 1.27 mm pitch (GND, CTS/NC, 5V, RX, TX, DTR) for a USB-serial adapter;
+  solder a header or wires on only when programming
   (FTDI or CH340 type) with the Optiboot/Nano bootloader. Uploads then work
   from the Arduino IDE as for a Nano.
 - 2 x 3 ISP pads (MISO, 5V, SCK, MOSI, RST, GND), or Tag-Connect TC2030

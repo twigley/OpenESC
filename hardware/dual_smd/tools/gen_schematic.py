@@ -74,10 +74,10 @@ FP = dict(
  r0402="Resistor_SMD:R_0402_1005Metric",
  c0402="Capacitor_SMD:C_0402_1005Metric", c0603="Capacitor_SMD:C_0603_1608Metric",
  c0805="Capacitor_SMD:C_0805_2012Metric", c1206="Capacitor_SMD:C_1206_3216Metric",
- cp8="Capacitor_SMD:CP_Elec_8x10",
+ cp8="Capacitor_SMD:CP_Elec_6.3x7.7",
  pad4="TestPoint:TestPoint_Pad_4.0x4.0mm",
  jst3="Connector_JST:JST_SH_SM03B-SRSS-TB_1x03-1MP_P1.00mm_Horizontal",
- hdr6="Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical",
+ hdr6="Connector_PinHeader_1.27mm:PinHeader_1x06_P1.27mm_Vertical",
  tc2030="Connector:Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical",
 )
 
@@ -113,8 +113,8 @@ for m in (1, 2):
     add(U,"DRV8300DPWR","DRV8300DPWR","tssop20",drv,"DRV8300DPWR")
     add(f"C{6+m}","C","10uF 25V","c0805",{"1":"VBAT","2":"GND"})
     add(f"C{8+m}","C","100nF 25V","c0402",{"1":"VBAT","2":"GND"})
-    add(f"C{16+2*m-1}","CP","330uF 16V","cp8",{"1":"VBAT","2":"GND"})
-    add(f"C{16+2*m}","CP","330uF 16V","cp8",{"1":"VBAT","2":"GND"})
+    add(f"C{16+2*m-1}","CP","220uF 16V","cp8",{"1":"VBAT","2":"GND"})
+    add(f"C{16+2*m}","CP","220uF 16V","cp8",{"1":"VBAT","2":"GND"})
 
 mcu = {"4":"+5V","6":"+5V","18":"+5V","20":"AREF","3":"GND","5":"GND","21":"GND","33":"GND",
        "29":"~RESET","7":"XTAL1","8":"XTAL2","19":None,"22":None,

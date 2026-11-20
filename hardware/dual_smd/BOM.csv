@@ -5,7 +5,7 @@ C1-C6,6,220 nF 25 V X7R,generic,0603,Bootstrap BSTx-SHx; DRV8300D max 1 uF
 C7 C8,2,10 uF 25 V X7R,generic,0805,GVDD bypass (datasheet: >=10 uF)
 C9 C10,2,100 nF 25 V X7R,generic,0402/0603,GVDD HF bypass at pin 7
 C11-C16,6,10 uF 25 V X7R,generic,1206,"Bus decoupling, one at each half-bridge (VBAT to GND)"
-C17-C20,4,330 uF 16 V low-ESR,polymer or electrolytic,8 mm can SMD,"Bulk, two per bridge (rating >= 2x 8.4 V)"
+C17-C20,4,220 uF 16 V low-ESR,"electrolytic or polymer, 6.3 mm can",CP_Elec_6.3x7.7 SMD,"Bulk, two per bridge; shrunk from 330 uF 8 mm to fit 30 x 25 mm"
 R1-R12,12,10 R,generic,0402,Gate series resistors (datasheet curves use 15 R; tune on scope)
 R13-R24,12,10 k,generic,0402,Gate-source pull-down on every MOSFET
 J3 J4,2,3-pin header (5V / wiper / GND),JST-SH or 2.54 mm,SMD/THT,Speed pots motor 1 (PC1/A1) and motor 2 (PC2/A2); pads to save space
@@ -19,5 +19,5 @@ C23-C26,4,100 nF X7R,generic,0402,"MCU VCC x2, AVCC, AREF"
 C27,1,10 uF 10 V X7R,generic,0603,+5V bulk
 C28,1,100 nF X7R,generic,0402,DTR to RESET auto-reset
 R25,1,10 k,generic,0402,RESET pull-up
-J1,1,6-pin serial header (GND CTS 5V RX TX DTR),generic,1.27 or 2.54 mm / pads,USB-serial adapter for uploads
+J1,1,6 bare pads 1.27 mm pitch (GND CTS 5V RX TX DTR),-,PinHeader_1x06_P1.27mm footprint / pads,"Solder a header or wires only when programming; was a 2.54 mm header (15 mm long)"
 J2,1,ISP pads 2x3,Tag-Connect TC2030 footprint or 2.54 mm,pads,Bootloader burn once; battery disconnected
