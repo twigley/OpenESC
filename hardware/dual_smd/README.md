@@ -17,6 +17,8 @@ their datasheets before ordering.
 | Motors | 2 x 3-phase BLDC, independent speed | Tom |
 | Controller | ATmega328P on the board, no Nano (chosen 2026-11-20) | Tom |
 | Size | As small as possible, surface mount. Estimate about 30 x 25 mm with 3.3 x 3.3 mm MOSFETs, or 35 x 30 mm with 5 x 6 mm | Tom |
+| Use | Dual-motor fixed wing. Some airflow, 20 A as peaks, not continuous | Tom |
+| MOSFET package | 3.3 x 3.3 mm (BSZ019N03LS), giving a board of about 30 x 25 mm | chosen from the use |
 
 ## Why the IR2110 has to go
 

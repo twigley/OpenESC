@@ -1,6 +1,6 @@
 Ref,Qty,Value,Part number (example),Footprint,Notes
 U1 U2,2,3-phase half-bridge gate driver,TI DRV8300DPWR,TSSOP-20 (PW),"D variant = integrated bootstrap diodes, non-inverted INLx, fixed ~200 ns dead time; GVDD 5-20 V"
-Q1-Q12,12,"N-MOSFET 30-40 V, logic level","Infineon BSC014N04LSATMA1 (5x6, enclosed) or a 30 V 3.3x3.3 part (airflow)","TDSON-8 5x6 mm or PQFN 3.3x3.3 mm","Must have RDS(on) specified at VGS=4.5 V: high-side gate only gets ~VBAT-0.85 V. Verify Qg against bootstrap cap"
+Q1-Q12,12,"N-MOSFET 30 V, logic level",Infineon BSZ019N03LSATMA1 (LCSC/JLCPCB C152374),TSDSON-8 FL / PQFN 3.3x3.3 mm,"1.9 mOhm class; check RDS(on) at VGS=4.5 V in the datasheet. Fallback for hotter installs: BSC014N04LS 5x6 mm"
 C1-C6,6,220 nF 25 V X7R,generic,0603,Bootstrap BSTx-SHx; DRV8300D max 1 uF
 C7 C8,2,10 uF 25 V X7R,generic,0805,GVDD bypass (datasheet: >=10 uF)
 C9 C10,2,100 nF 25 V X7R,generic,0402/0603,GVDD HF bypass at pin 7
