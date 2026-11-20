@@ -83,6 +83,11 @@ def power_sym(name, down):
                              gfx=g, ref_at=(0, -3 if down else 3), val_at=(0, -1.6 if down else 1.4))
 for n, d in (("GND", True), ("VBAT", False), ("+5V", False)):
     power_sym(n, d)
+# ERC power flag: an ordinary (non-global) symbol whose power_out pin marks the net it
+# touches as driven. '#' reference keeps it off the BOM and the board.
+SYM["PWR_FLAG"] = dict(ref="#FLG", power=False, flag=True, ref_at=(0, 1.6), val_at=(0, 2.6),
+    pins=[("1", "pwr", "power_out", 0, 0, 90, 0, False)],
+    gfx=[pl((0, 0), (0, 1.27), (-1.016, 1.905), (0, 2.54), (1.016, 1.905), (0, 1.27))])
 
 # DRV8300DPWR: right-side rows line up with the three half-bridges drawn beside it.
 PH_PITCH = 24
@@ -131,6 +136,10 @@ SPEC = {p[0]: p for p in spec.PARTS}
 def place(ref, sym, x, y):
     _, _, val, fp, _, mpn = SPEC[ref]
     inst.append((ref, sym, x, y, val, fp, mpn))
+flg_n = [0]
+def flag(x, y):
+    flg_n[0] += 1
+    inst.append((f"#FLG{flg_n[0]:02d}", "PWR_FLAG", x, y, "PWR_FLAG", "", ""))
 def pwr(name, x, y):
     pwr_n[0] += 1
     inst.append((f"#PWR{pwr_n[0]:03d}", "PWR_" + name, x, y, name, "", ""))
@@ -289,6 +298,7 @@ def supply(X, Y):
     wire((X + 6, yg), (X + 6, yg + 4))
     for j, c in enumerate(caps):
         place(c, "C_V", X + 9 + 5 * j, yv + 1)
+    flag(X + 7, yv); flag(X + 7, yg)      # battery is the source of VBAT and GND (ERC)
     # LDO: VIN row 0, GND row 2 line up with the rails
     place("U4", "MCP1703A-5002", xend + 5, yv)       # VIN at xend+0, VOUT at xend+10
     vo = xend + 10
@@ -343,13 +353,14 @@ for ref, s, x, y, *_ in inst:
 junctions = [p for p, d in deg.items() if d + pin_pts.get(p, 0) >= 3]
 
 # ------------------------------------------------------------- writer
-def lib_symbol(name):
+def lib_symbol(name, prefix=LIB + ":"):
     s = SYM[name]
-    hide_names = name in ("R_V", "R_H", "C_V", "C_H", "CP_V", "NMOS", "PAD", "RESONATOR") or s["power"]
-    head = f'(symbol "{LIB}:{name}"' + (" (power)" if s["power"] else "")
+    hide_names = name in ("R_V", "R_H", "C_V", "C_H", "CP_V", "NMOS", "PAD", "RESONATOR", "PWR_FLAG") or s["power"]
+    head = f'(symbol "{prefix}{name}"' + (" (power)" if s["power"] else "")
     if hide_names: head += " (pin_numbers hide)"
     head += f' (pin_names (offset {"0" if s["power"] else "1.016"}){" hide" if hide_names else ""})'
-    head += f' (exclude_from_sim no) (in_bom {"no" if s["power"] else "yes"}) (on_board yes)'
+    nob = s["power"] or s.get("flag")
+    head += f' (exclude_from_sim no) (in_bom {"no" if nob else "yes"}) (on_board {"no" if s.get("flag") else "yes"})'
     hide = " hide" if s["power"] else ""
     val = s.get("net", name)
     L = [head,
@@ -392,13 +403,13 @@ def write():
     for x1, y1, x2, y2 in boxes:
         o.append(f'(rectangle (start {mm(x1)} {mm(y1)}) (end {mm(x2)} {mm(y2)}) (stroke (width 0.254) (type dash)) (fill (type none)) (uuid "{uid("b", x1, y1)}"))')
     for ref, s, x, y, val, fp, mpn in inst:
-        S = SYM[s]; pw = S["power"]
+        S = SYM[s]; pw = S["power"] or S.get("flag", False)
         rx, ry = S["ref_at"]; vx, vy = S["val_at"]
         props = [("Reference", ref, x + rx, y - ry, pw), ("Value", val, x + vx, y - vy, False),
                  ("Footprint", fp, x, y, True), ("Datasheet", "", x, y, True), ("Description", "", x, y, True)]
         if mpn: props.append(("MPN", mpn, x, y, True))
         just = " (justify left)" if not pw and s not in ("ATmega328P-MU", "DRV8300DPWR", "MCP1703A-5002", "CONN6", "CONN3", "CONN2") else ""
-        L = [f'(symbol (lib_id "{LIB}:{s}") (at {mm(x)} {mm(y)} 0) (unit 1) (exclude_from_sim no) (in_bom {"no" if pw else "yes"}) (on_board yes) (dnp no) (uuid "{uid("s", ref)}")']
+        L = [f'(symbol (lib_id "{LIB}:{s}") (at {mm(x)} {mm(y)} 0) (unit 1) (exclude_from_sim no) (in_bom {"no" if pw else "yes"}) (on_board {"no" if S.get("flag") else "yes"}) (dnp no) (uuid "{uid("s", ref)}")']
         for k, v, px, py, hid in props:
             j = just if k in ("Reference", "Value") else ""
             L.append(f'(property "{k}" "{v}" (at {mm(px)} {mm(py)} 0) (effects (font (size 1.27 1.27)){j}{" hide" if hid else ""}))')
@@ -408,6 +419,16 @@ def write():
         o.append("\n".join(L))
     o.append('(sheet_instances (path "/" (page "1"))))')
     open(OUT, "w").write("\n".join(o) + "\n")
+    # Project symbol library holding the same symbols, plus the project lib tables,
+    # so KiCad resolves OpenESC_dual:* and the local footprint library.
+    kd = os.path.dirname(OUT)
+    with open(os.path.join(kd, f"{LIB}.kicad_sym"), "w") as f:
+        f.write('(kicad_symbol_lib (version 20231120) (generator "draw_schematic") (generator_version "8.0")\n')
+        f.write("\n".join(lib_symbol(n, prefix="") for n in sorted(SYM)) + "\n)\n")
+    with open(os.path.join(kd, "sym-lib-table"), "w") as f:
+        f.write(f'(sym_lib_table\n  (version 7)\n  (lib (name "{LIB}") (type "KiCad") (uri "${{KIPRJMOD}}/{LIB}.kicad_sym") (options "") (descr "Generated by draw_schematic.py"))\n)\n')
+    with open(os.path.join(kd, "fp-lib-table"), "w") as f:
+        f.write(f'(fp_lib_table\n  (version 7)\n  (lib (name "{LIB}") (type "KiCad") (uri "${{KIPRJMOD}}/{LIB}.pretty") (options "") (descr "Project footprints"))\n)\n')
 
 if __name__ == "__main__":
     placed = {i[0] for i in inst if not i[0].startswith("#")}

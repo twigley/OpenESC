@@ -66,6 +66,7 @@ for s in find(root, "symbol"):
         node = ("pin", ref, num)
         join(node, ("pt", pt))
         for w in on_wire(pt): join(("pt", pt), ("pt", w))
+        if ref.startswith("#FLG"): continue      # ERC flag only, no net of its own
         if power: join(node, ("net", name))
         else: pin_nodes[node] = pt
 for kind in ("label", "global_label"):

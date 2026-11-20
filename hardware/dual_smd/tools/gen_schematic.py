@@ -70,7 +70,10 @@ FP = dict(
  qfn32="Package_DFN_QFN:QFN-32-1EP_5x5mm_P0.5mm_EP3.1x3.1mm",
  sot23="Package_TO_SOT_SMD:SOT-23",
  reson="Crystal:Resonator_SMD_Murata_CSTxExxV-3Pin_3.0x1.1mm",
- fet="Package_TO_SOT_SMD:Infineon_PG-TSDSON-8_FL",   # ASSIGN/VERIFY in KiCad
+ # Project-local (kicad/OpenESC_dual.pretty): KiCad ships no Infineon TSDSON-8 FL, so this is
+ # Diodes_PowerDI3333-8 geometry (same 3.3x3.3 mm, 0.65 mm pitch, 1-3 S / 4 G / 5-8 D) with
+ # pads 6-8 added on the drain fingers. Check against Infineon's land pattern before fab.
+ fet="OpenESC_dual:Infineon_PG-TSDSON-8_FL_3.3x3.3mm_P0.65mm",
  r0402="Resistor_SMD:R_0402_1005Metric",
  c0402="Capacitor_SMD:C_0402_1005Metric", c0603="Capacitor_SMD:C_0603_1608Metric",
  c0805="Capacitor_SMD:C_0805_2012Metric", c1206="Capacitor_SMD:C_1206_3216Metric",
