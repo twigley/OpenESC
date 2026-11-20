@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the KiCad 8 schematic for the dual-motor SMD ESC.
+"""Netlist specification for the dual-motor SMD ESC (PARTS table).
+
+The drawn KiCad sheet comes from draw_schematic.py; running this file runs that.
+Old description:
 
 Single source of truth for the netlist. Every pin gets a net label at its
 connection point (no drawn wires), so connectivity is exactly what the
@@ -262,6 +265,6 @@ def main():
     return nets
 
 if __name__ == "__main__":
-    nets = main()
-    singles = [n for n,p in nets.items() if n and len(p) < 2]
-    print(f"parts={len(PARTS)} nets={len([n for n in nets if n])} single-pin nets={singles}")
+    # The KiCad sheet is drawn by draw_schematic.py; this module only holds the netlist (PARTS).
+    import runpy
+    runpy.run_path(os.path.join(HERE, "draw_schematic.py"), run_name="__main__")
