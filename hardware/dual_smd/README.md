@@ -88,35 +88,49 @@ AT32F421 QFN32 is **not** pin-identical to the STM32F051K8U: its pins 16 and
 
 ## PCB status
 
-The PCB is **placed but not routed**. 28 x 20 mm has not been shown to route.
+The PCB is **placed on 4 layers at 28 x 20 mm but not routed**.
 
-- **Placement fits.** All 111 on-board parts sit inside 28 x 20 mm with no
-  courtyard overlaps (`kicad/render_top.png`, `kicad/render_bottom.png`).
-  - **Top:** BAT+ / BAT- pads and both shunts on the left edge. Each
-    motor's three AON7934s sit in a row under its phase pads (M1 on the top
-    edge, M2 on the bottom edge), and the low-side source buses run between
-    the rows. The drivers and the 5 V buck are on the right, and the
-    signal / telemetry / 5 V pads in the bottom-left corner.
-  - **Bottom:** VBAT pour under the FET rows, fed from BAT+ through a via
-    array. The BEMF networks and bus caps sit under the phase pads, the MCUs
-    and the LDO at the right, and the SWD pads along the middle.
-- **To fit, the MCU is the 4 x 4 mm AT32F421K8U7-4** (same die and pinout as
-  the 5 x 5 mm K8U7). The buck runs at 1.2 MHz so a 3 x 3 mm inductor fits.
-- **Power copper is drawn as zones** in `build_pcb.py`: phase nodes, low-side
-  source gaps and buses, VBAT islands with in-pad vias, the bottom VBAT pour
-  and GND fills.
-- **Autorouting failed.** Freerouting 2.5.0, given the zones as planes and
-  keep-outs over them:
-  - 2 layers: 100 connections left unrouted after 60 passes.
-  - 4-layer trial (inner GND plane): 84 left unrouted.
-- **Two causes:**
-  - Each MCU sits directly under its DRV8300 on the other face, so there is
-    almost no room to via between the two QFNs.
-  - On 2 layers, each motor's six gate traces and three phase-sense traces
-    have to cross either the low-side bus (top) or the VBAT pour (bottom).
-- **DRC on the unrouted board:** 159 unconnected items, plus warnings and
-  errors from the unrouted state (keep-out overlaps, dangling VBAT vias,
-  starved thermals, silkscreen).
+**Stackup:** 1.6 mm, JLC04161H-7628 style, 2 oz outer / 0.5 oz inner. JLC
+offers 2 oz outer copper on 4-layer boards; confirm when ordering.
+
+| Layer | Use |
+|---|---|
+| L1 top | Power zones (phase nodes, low-side source buses, VBAT drain islands), signals |
+| L2 | Solid GND plane |
+| L3 | VBAT plane (x < 24 mm), GND beyond |
+| L4 bottom | Gate drivers, MCUs, sense networks, signals |
+
+**Placement:** all 117 on-board parts fit with no courtyard overlaps
+(`kicad/render_top.png`, `kicad/render_bottom.png`,
+`kicad/layer_L2_GND.png`, `kicad/layer_L3_VBAT.png`).
+
+- **Gate drivers:** each DRV8300 is on the bottom, right under its motor's
+  middle phase pad. That puts it within a few mm of all three AON7934 gates
+  and phase nodes.
+- **MCUs:** at the bottom right, no longer under the drivers.
+- **BEMF filter caps:** 1 nF on each divided phase was added (C115-C117,
+  C215-C217).
+- **Gate series resistors:** don't fit, so they are still left out.
+
+**Routing:** `tools/route_pcb.py` runs these steps:
+
+1. Fans out every GND / VBAT pad to the planes with its own via (55 placed,
+   32 pads without room).
+2. Hands the remaining nets to Freerouting 2.5.0.
+3. Removes the router keep-outs.
+4. Adds the top / bottom GND fills and stitching vias.
+
+Freerouting stalls at 86-94 unrouted connections with about 260 violations
+after 16 passes. The congestion is on the bottom around each driver and MCU:
+
+- the driver's gate and bootstrap pins (GH/GL/BST to the gate escape vias
+  and bootstrap caps)
+- the six INH/INL lines from MCU to driver
+- the BEMF / neutral / ISENSE lines into the MCU
+- +3V3 to both MCUs and the INAs
+- SWD / signal / telemetry pads
+
+The committed board is the unrouted placement.
 
 ## Files
 
@@ -126,6 +140,7 @@ The PCB is **placed but not routed**. 28 x 20 mm has not been shown to route.
   readable sheet. Labels are used only between blocks.
 - `tools/check_schematic.py`: rebuilds connectivity from the drawn wires and
   fails unless it matches `PARTS`.
+- `tools/route_pcb.py`: power fanout, Freerouting run, keep-out removal, GND fill and stitching.
 - `tools/build_pcb.py`: builds `kicad/dual_esc.kicad_pcb`. It places the parts,
   draws the power copper as zones, and links each footprint to its schematic
   symbol so the GUI's Update PCB keeps working. Run it with KiCad's Python.
