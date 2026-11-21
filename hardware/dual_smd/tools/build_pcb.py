@@ -90,12 +90,12 @@ def per_motor(m):
     for ref, (x, y) in zip(parts, slots):
         a(ref, x, y, 90, "B")
     # bottom right: MCU and its support, clear of the driver
-    a(f"U{b+1}", 24.7, 4.2, 180, "B")
+    a(f"U{b+1}", 20.8, 4.2, 180, "B")            # -> x 23.8: under the empty top strip left of the BEC
     for i, ref in enumerate((f"C{b+1}", f"C{b+3}", f"C{b+4}", f"R{b+1}", f"R{b+2}")):
-        a(ref, 21.1, 1.0 + 1.15 * i, 0, "B")
-    a(f"C{b+2}", 25.0, 7.4, 0, "B")              # VDD pin 17
-    a(f"R{b+6}", 21.3, 6.75, 0, "B")            # INA output filter R
-    a(f"C{b+14}", 23.0, 7.4, 0, "B")             # filter C at PA6
+        a(ref, 24.6, 1.0 + 1.15 * i, 0, "B")
+    a(f"C{b+2}", 21.5, 7.4, 0, "B")              # VDD pin 17
+    a(f"R{b+6}", 24.6, 6.75, 0, "B")            # INA output filter R
+    a(f"C{b+14}", 23.3, 7.6, 0, "B")             # filter C at PA6
     # bottom: current-sense amp under BAT-, next to its shunt
     a(f"U{b+3}", 1.7, 8.0, 0, "B")
     a(f"C{b+13}", 1.7, 6.3, 0, "B")
@@ -114,12 +114,12 @@ at("U1", 22.2, 10.0, 0); at("L1", 25.6, 9.9, 0)
 at("C9", 25.6, 7.275, 0); at("C10", 25.6, 12.525, 0)
 at("C6", 21.4, 7.6, 0); at("C7", 23.2, 7.6, 90); at("C8", 21.4, 12.15, 0)
 at("R3", 23.2, 12.4, 90); at("R4", 21.4, 13.1, 0)
-at("C5", 21.9, 4.2, 90)                          # buck input 10 uF (top right, VBAT/GND by via)
+at("C5", 26.5, 10.0, 90, "B")                    # buck input 10 uF, bottom right (VBAT/GND by via)
 # 3.3 V LDO: top right, next to the BEC
 at("U2", 25.0, 4.0, 90); at("C11", 27.3, 2.6, 90); at("C12", 27.3, 5.4, 90)
 # SWD supply / ground pads, Vbat divider
 at("P5", 25.55, 1.0, 0); at("P6", 25.55, H - 1.0, 0)
-at("R1", 24.0, 14.6, 0); at("R2", 24.0, 15.5, 0)      # Vbat divider on top
+at("R1", 26.9, 14.6, 0); at("R2", 26.9, 15.5, 0)      # Vbat divider on top, clear of MCU2
 
 OFFBOARD_X = W + 6.0
 
