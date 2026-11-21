@@ -57,6 +57,7 @@ for k, x in enumerate(FX):
     at(f"P{101+k}", x, 1.85)
     at(f"P{201+k}", x, H - 1.85)
 
+DRV_ROT = {1: 180, 2: 0}        # chosen so each driver's output side faces its own FET row
 def per_motor(m):
     """Place motor m's parts. Motor 2 mirrors motor 1 about y = H/2.
     4-layer layout: VBAT is the L3 plane and GND the L2 plane, so the bottom
@@ -67,26 +68,28 @@ def per_motor(m):
     Y = (lambda y: y) if m == 1 else (lambda y: H - y)
     R = (lambda r: r) if m == 1 else (lambda r: (360 - r) % 360)
     a = lambda ref, x, y, rot=0, side="F": at(ref, x, Y(y), R(rot), side)
-    # bottom: gate driver under the middle phase pad, gate/SH pins toward the FETs
-    # clear of the edge and of FET B's VBAT vias (left of them for M1, right for the mirrored M2)
-    a(f"U{b+2}", 11.65 if m == 1 else 13.95, 3.3, 0, "B")
-    # bottom, left of the driver: bus caps of FETs A and B, GVDD caps
-    a(f"C{b+10}", 4.3, 2.2, 90, "B"); a(f"C{b+11}", 6.4, 2.2, 90, "B")
-    a(f"C{b+5}", 8.25, 2.2, 90, "B"); a(f"C{b+6}", *((6.4, 4.5) if m == 1 else (5.0, 4.7)), 0, "B")
-    # bottom, right of the driver: bootstrap caps, bus cap of FET C
+    # bottom middle band: both drivers side by side under the low-side bus zones (nothing on top
+    # above their pins), each with its gate / SH / BST side toward its own FET row
+    at(f"U{b+2}", 9.0 if m == 1 else 16.6, 10.0, DRV_ROT[m], "B")
+    # bootstrap caps in the gap between the two drivers, GVDD caps beside each driver
     for k in range(3):
-        a(f"C{b+7+k}", 16.6 if m == 1 else 17.65, 0.85 + 1.2 * k, 0, "B")
-    a(f"C{b+12}", 18.6 if m == 1 else 19.65, 2.2, 90, "B")
-    # bottom: low-side gate pull-downs (to GND) beside each GL escape via
+        at(f"C{b+7+k}", 12.25 if m == 1 else 13.35, 8.0 + 2.0 * k, 90, "B")
+    if m == 1:
+        at("C105", 5.5, 8.3, 90, "B"); at("C106", 5.5, 11.0, 90, "B")
+    else:
+        at("C205", 20.2, 11.7, 90, "B"); at("C206", 20.2, 8.8, 90, "B")
+    # bottom, under the phase pads: bus caps
+    a(f"C{b+10}", 4.3, 2.2, 90, "B"); a(f"C{b+11}", 6.4, 2.2, 90, "B")
+    a(f"C{b+12}", 18.6, 2.2, 90, "B")
     dd = 1 if m == 1 else -1
     for k, x in enumerate(FX):
-        a(f"R{b+3+k}", x - 2.6 * dd, 6.8, 180 if m == 1 else 0, "B")
-        # 4.7R gate series resistors beside the gate escape vias (GH via x + 1.38*dd, GL via x - 1.38*dd)
-        a(f"R{b+20+k}", x + 1.38 * dd, 7.85, 0, "B")
-        a(f"R{b+23+k}", x - 1.38 * dd, 7.85, 0, "B")
-    # bottom middle band: BEMF dividers, neutral network and BEMF filter caps
-    parts = [f"R{b+i}" for i in (7, 8, 9, 10, 11, 12, 13, 14, 15, 16)] + [f"C{b+15+k}" for k in range(3)]
-    slots = [(6.75 + 1.2 * i, 9.05) for i in range(13)]           # one row of vertical 0201s, track-wide gaps
+        # top: 4.7R gate series resistors right under each gate pin (FET-side pad nearest the pin)
+        for ref, s_ in ((f"R{b+20+k}", dd), (f"R{b+23+k}", -dd)):
+            a(ref, x + 0.8 * s_, 7.4, 0 if s_ > 0 else 180)
+    # bottom, under the phase pads: BEMF network, BEMF filter caps and low-side gate pull-downs
+    parts = ([f"R{b+i}" for i in (7, 8, 9, 10, 11, 12, 13, 14, 15, 16)] + [f"C{b+15+k}" for k in range(3)]
+             + [f"R{b+3+k}" for k in range(3)])
+    slots = [(7.9 + 1.2 * i, 1.2) for i in range(8)] + [(7.9 + 1.2 * i, 2.9) for i in range(8)]
     for ref, (x, y) in zip(parts, slots):
         a(ref, x, y, 90, "B")
     # bottom right: MCU and its support, clear of the driver
@@ -258,8 +261,6 @@ def power_copper(board, net):
             add_zone(board, net(f"M{m}_{p}"), F, [(x - 2.35, yy(0.3)), (x + 2.35, yy(0.3)), (x + 2.35, yy(3.75)),
                      (nx2, yy(3.75)), (nx2, yy(5.4)), (nx1, yy(5.4)), (nx1, yy(3.75)), (x - 2.35, yy(3.75))], prio=5)
             # phase tap via (outside the keep-out) so the router can reach the node from the bottom
-            tap = (x + 2.05, yy(1.2)) if k != 1 else ((15.0, yy(0.65)) if m == 1 else (10.8, yy(0.65)))
-            add_via(board, net(f"M{m}_{p}"), *tap)
             # LS gap beside the S2 pins, running into the LS bus; notched round the
             # low-side gate pin (G2) and its escape via
             o, i = (x - 2.6, x - 1.9) if m == 1 else (x + 2.6, x + 1.9)
@@ -267,10 +268,9 @@ def power_copper(board, net):
             add_zone(board, net(f"M{m}_LS"), F, [(o, yy(4.0)), (pin, yy(4.0)), (pin, yy(5.95)), (i, yy(5.95)),
                                                   (i, yy(7.6)), (o, yy(7.6))], prio=4)
             KEEPOUT.setdefault(F, []).append(rect(min(o, i) + 0.2, yy(4.5) if m == 1 else yy(7.1), max(o, i) - 0.2, yy(7.1) if m == 1 else yy(4.5)))
-            # gate escape vias just below the gate pins (G2 = low side, G1 = high side)
-            for gx, gnet in ((x - 1.38 * d, f"M{m}_GL{p}"), (x + 1.38 * d, f"M{m}_GH{p}")):
-                v = add_via(board, net(gnet), gx, yy(7.0))
-                t = pcbnew.PCB_TRACK(board); t.SetStart(P(gx, yy(6.375))); t.SetEnd(P(gx, yy(7.0)))
+            # gate pin -> FET-side pad of its 4.7R series resistor (top, just below the FET)
+            for sx, gnet in ((-d, f"M{m}_GL{p}"), (d, f"M{m}_GH{p}")):
+                t = pcbnew.PCB_TRACK(board); t.SetStart(P(x + 1.38 * sx, yy(6.375))); t.SetEnd(P(x + 1.12 * sx, yy(7.4)))
                 t.SetWidth(mm(0.25)); t.SetLayer(F); t.SetNet(net(gnet)); board.Add(t)
             # VBAT island: drain pins + pad 10, with vias to the bottom VBAT pour
             vx1, vx2 = (x + 0.389, x + 2.25) if m == 1 else (x - 2.25, x - 0.389)
@@ -293,7 +293,7 @@ def power_copper(board, net):
         add_zone(board, net(f"M{m}_LS"), F, rect(4.2, yy(6.3), 5.6, yy(8.4)), prio=4)
         # LS bus under the FET row, from the shunt to the last FET
         add_zone(board, net(f"M{m}_LS"), F, rect(5.6, yy(7.45), 20.3, yy(9.65)), prio=4)
-        add_via(board, net(f"M{m}_LS"), 5.95, yy(9.25))      # LS tap for the INA186 Kelvin lead
+        add_via(board, net(f"M{m}_LS"), 4.5, yy(7.0))        # LS tap for the INA186 Kelvin lead
     # inner planes: L2 (In1) solid GND, L5 (In4) VBAT over the power area, GND beyond; L3/L4 signal
     make_zone(board, net("GND"), pcbnew.In1_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, W, H)], 1, False)
     make_zone(board, net("VBAT"), pcbnew.In4_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, 24.0 + WIDEN, H)], 2, False)
