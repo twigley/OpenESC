@@ -6,8 +6,9 @@ its own Artery AT32F421 running the stock **AM32** firmware target
 DRV8300 gate driver and three AOS AON7934 dual half-bridge MOSFETs. A shared
 buck gives 5 V for the receiver (BEC), and an LDO gives 3.3 V for both MCUs.
 
-**Status:** schematic drawn and checked (ERC clean); PCB placed at 28 x 20 mm,
-routing: see [PCB status](#pcb-status). Not built. Part numbers marked
+**Status:** schematic drawn and checked (ERC clean). The PCB is **placed
+but not routed**: 6 layers, 31 x 20 mm. It needs interactive routing in
+KiCad (see [Routing notes](#routing-notes)). Not built. Part numbers marked
 "verify" must be checked before ordering.
 
 ## Targets
@@ -88,73 +89,76 @@ AT32F421 QFN32 is **not** pin-identical to the STM32F051K8U: its pins 16 and
 
 ## PCB status
 
-The PCB is **placed on 4 layers at 28 x 20 mm but not routed**.
+**Placed, not routed.** The board is 31 x 20 mm with 6 layers. All 129
+on-board parts fit with no courtyard overlaps, and placement DRC is clean
+(only unconnected items). Renders: `kicad/render_top.png`,
+`kicad/render_bottom.png`.
 
-**Stackup:** 1.6 mm, JLC04161H-7628 style, 2 oz outer / 0.5 oz inner. JLC
-offers 2 oz outer copper on 4-layer boards; confirm when ordering.
+### Stackup (1.6 mm, JLC 6-layer style)
 
 | Layer | Use |
 |---|---|
-| L1 top | Power zones (phase nodes, low-side source buses, VBAT drain islands), signals |
+| L1 top (1 oz) | MOSFETs, phase / battery pads, shunts, gate resistors, BEC, LDO; power zones (phase nodes, low-side source buses, VBAT drain islands) |
 | L2 | Solid GND plane |
-| L3 | VBAT plane (x < 24 mm), GND beyond |
-| L4 bottom | Gate drivers, MCUs, sense networks, signals |
+| L3, L4 | Signal |
+| L5 | VBAT plane (GND beyond x = 27.4 mm) |
+| L6 bottom (1 oz) | Both DRV8300s, both MCUs, current-sense amps, BEMF networks, small passives |
 
-**Placement:** all 117 on-board parts fit with no courtyard overlaps
-(`kicad/render_top.png`, `kicad/render_bottom.png`,
-`kicad/layer_L2_GND.png`, `kicad/layer_L3_VBAT.png`).
+**Outer copper is 1 oz.** JLC offers 2 oz outer on 6-layer boards, but then
+the minimum trace / space is 0.16 mm, and the QFN escapes need 0.13 mm.
+At 1 oz the outer power zones carry about half the current of 2 oz, so the
+10-12 A phase and battery paths should be widened where possible,
+solder-tinned, or reinforced with bus wire. The MOSFET drains also reach the
+L5 VBAT plane through vias.
 
-- **Gate drivers:** each DRV8300 is on the bottom, right under its motor's
-  middle phase pad. That puts it within a few mm of all three AON7934 gates
-  and phase nodes.
-- **MCUs:** at the bottom right, no longer under the drivers.
-- **BEMF filter caps:** 1 nF on each divided phase was added (C115-C117,
-  C215-C217).
-- **Gate series resistors:** don't fit, so they are still left out.
+**Via-in-pad:** every DRV8300 and MCU signal pin has a filled via-in-pad,
+0.3 mm diameter with a 0.15 mm hole, epoxy filled and capped. That is within
+JLC's multilayer minimum of a 0.15 mm hole / 0.25 mm via, at a surcharge.
+One JLC blog gives 0.20 mm as the minimum hole for via-in-pad, so confirm
+before ordering. A 0.20 mm hole means 0.35-0.4 mm vias, which do not fit
+side by side at the MCU's 0.4 mm pitch. The vias are staggered along the
+pad length.
 
-**0201:** 48 small-signal parts moved to 0201 (BEMF dividers, neutral
-network, BEMF filter caps, gate pull-downs, BOOT0 / SIG / INA-output
-resistors, MCU and INA 100 nF caps, NRST cap, ISENSE filter cap, Vbat
-divider). The GVDD and bootstrap caps (25 V), the 1 uF caps and the bus and
-bulk caps keep their larger sizes.
+**Placement:**
+- Both DRV8300s are in the bottom middle band, with only the low-side bus
+  zones above them. Bootstrap caps sit between the drivers, GVDD caps beside
+  them.
+- The 4.7 R gate series resistors are on top, just under each gate pin.
+- The BEMF networks, BEMF filter caps and gate pull-downs are on the bottom,
+  under the phase pads.
+- The MCUs are bottom right with nothing above their pins (checked with
+  `tools/above_check.py`).
+- The bus caps are under the phase pads. The LDO, BEC and SWD pads are top
+  right.
 
-LCSC stock checked (2026-11-21):
-- 100 nF 10 V X5R 0201: C284966
-- 10 nF 25 V X7R 0201: C285010
-- 1 nF 50 V X7R 0201: C301887
-- 10k 0201 1 %: C6853700
-- Other resistor values: the UNI-ROYAL 0201WMF ±1 % series covers 1 R-10 M
-  (25 V), so they are in stock.
+**0201 parts:** 48 small-signal parts are 0201. LCSC stock was checked
+2026-11-21:
+- 100 nF 10 V: C284966
+- 10 nF 25 V: C285010
+- 1 nF 50 V: C301887
+- 10k: C6853700
+- Other resistor values: UNI-ROYAL 0201WMF ±1 % series
 
-**Routing: not closed.**
+### Routing notes
 
-- **31 x 20 mm, 4 layers:** Freerouting leaves 149 unrouted, `gridroute.py`
-  about 86, `negroute.py` 67 overlapping nets.
-- **6-layer trial at 31 x 20** (the committed board): L1 / L6 parts and
-  power, L2 GND, L3 / L4 signal, L5 VBAT. `negroute.py` gets down to 53-55
-  overlapping nets (plus 4 unroutable) and then plateaus.
-- **Remaining conflicts:** fine-pitch escape round each DRV8300 and MCU.
-  The most crowded spot is the driver pin row nearest the board edge, where
-  several pins must escape through room for one track. Extra inner layers
-  only help once each pin can drop to them, which needs via-in-pad / HDI
-  vias (0.3 / 0.15 mm or smaller) at the 0.5 mm driver and 0.4 mm MCU pitch,
-  or a placement with no pin row facing the edge.
-- **JLC 6-layer, 2 oz outer:** available, but the minimum trace / space is
-  then 0.16 mm. The last trial therefore uses 1 oz outer copper (0.13 mm
-  spacing at the QFN escapes). At 1 oz the power zones carry about half the
-  current of 2 oz, so the 10-12 A paths would need wider copper or tinned /
-  bus-barred phase and battery paths.
-- **Last automated attempt (via-in-pad):** filled vias of 0.3 / 0.15 mm on
-  the driver and MCU signal pins, using JLC's multilayer minimum of 0.15 mm
-  hole / 0.25 mm via with epoxy fill and cap (JLC PCB capabilities page; one
-  JLC blog gives 0.20 mm as the minimum hole for via-in-pad).
-  - 47 pins got one. 31 could not, because a top-side part (phase pad,
-    LDO, pads) sits directly above the pin.
-  - `negroute.py` then plateaued at 59 overlapping nets plus 1 unroutable.
-  - Automated routing stopped there. The next step is interactive routing,
-    or a placement where the drivers and MCUs have nothing above them.
+Automated routing was tried and plateaued at about 55-65 conflicting nets
+in every setup: Freerouting 2.5.0, and `tools/gridroute.py` / `negroute.py`
+on 4 and 6 layers, with and without via-in-pad. Route it interactively in
+KiCad:
 
-The committed board is the unrouted 6-layer placement.
+1. Route the DRV8300 and MCU fanouts first. Drop each signal pin through
+   its via-in-pad to L3 / L4, then run the six INH/INL lines per channel,
+   the gate lines (driver -> 4.7 R on top -> FET gate) and the BST / SH
+   lines on L3 / L4.
+2. Keep each GHx / SHx pair together. Keep gate loops short.
+3. Power stays in the L1 / L6 zones: phase nodes, low-side buses to the
+   shunts, and VBAT drain islands with their vias to L5. Don't route
+   signals through them on L1.
+4. Run the BEMF / neutral / ISENSE lines to the MCU on L3 / L4. The shunt
+   Kelvin lead (INA186 IN+) goes from the LS tap via.
+5. Finish with the top / bottom GND fill and stitching vias to L2. GND /
+   VBAT pads already have fanout vias where `tools/route_pcb.py` placed
+   them.
 
 ## Files
 
@@ -164,6 +168,8 @@ The committed board is the unrouted 6-layer placement.
   readable sheet. Labels are used only between blocks.
 - `tools/check_schematic.py`: rebuilds connectivity from the drawn wires and
   fails unless it matches `PARTS`.
+- `tools/above_check.py`: checks no part on the other side sits over a DRV8300 / MCU pin.
+- `tools/negroute.py`: negotiated-congestion (rip-up) router experiment.
 - `tools/gridroute.py`: grid maze router for the outer layers (power fanout, then signal nets).
 - `tools/route_pcb.py`: power fanout, Freerouting run, keep-out removal, GND fill and stitching.
 - `tools/build_pcb.py`: builds `kicad/dual_esc.kicad_pcb`. It places the parts,
