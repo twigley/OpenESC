@@ -28,7 +28,7 @@ LIBS = {"OpenESC_dual": os.path.join(KD, "OpenESC_dual.pretty")}
 FREEROUTING = os.path.expandvars(r"%LOCALAPPDATA%\freerouting\freerouting.exe")
 
 W, H = 28.0, 20.0
-LAYERS = int(os.environ.get("ESC_LAYERS", "2"))   # 4 = feasibility trial with inner GND plane
+LAYERS = 4                     # L1 signal+power, L2 GND, L3 VBAT (+GND), L4 signal+power
 OX, OY = 100.0, 100.0
 mm = pcbnew.FromMM
 def P(x, y): return pcbnew.VECTOR2I(mm(OX + x), mm(OY + y))
@@ -55,42 +55,45 @@ for k, x in enumerate(FX):
     at(f"P{201+k}", x, H - 1.85)
 
 def per_motor(m):
-    """Place motor m's parts. Motor 2 mirrors motor 1 about y = H/2."""
+    """Place motor m's parts. Motor 2 mirrors motor 1 about y = H/2.
+    4-layer layout: VBAT is the L3 plane and GND the L2 plane, so the bottom
+    is free for the gate driver, which sits right under the middle phase pad,
+    close to its three half-bridges. The MCU is at the bottom right, clear of
+    the driver, with room between them for the six gate-input vias."""
     b = 100 * m
     Y = (lambda y: y) if m == 1 else (lambda y: H - y)
     R = (lambda r: r) if m == 1 else (lambda r: (360 - r) % 360)
     a = lambda ref, x, y, rot=0, side="F": at(ref, x, Y(y), R(rot), side)
-    # top: gate driver at the right, bootstrap caps beside its BST/SH pins
-    # rotated 180 so the gate/SH/BST pins face the FETs (left) and the logic inputs face right
-    a(f"U{b+2}", 23.75, 3.7, 180)
+    # bottom: gate driver under the middle phase pad, gate/SH pins toward the FETs
+    a(f"U{b+2}", FX[1], 2.95, 0, "B")
+    # bottom, left of the driver: bus caps of FETs A and B, GVDD caps
+    a(f"C{b+10}", 4.3, 2.2, 90, "B"); a(f"C{b+11}", 6.4, 2.2, 90, "B")
+    a(f"C{b+5}", 8.25, 2.2, 90, "B"); a(f"C{b+6}", 9.55, 2.2, 90, "B")
+    # bottom, right of the driver: bootstrap caps, bus cap of FET C
     for k in range(3):
-        a(f"C{b+7+k}", 20.45, 1.15 + 1.95 * k, 90)  # bootstrap caps by the BST/SH pins
-    a(f"C{b+5}", 27.15, 2.2, 90)                 # GVDD 10 uF 0603, at pin 4 (now on the right)
-    a(f"C{b+6}", 27.15, 4.65, 90)                # GVDD 100 nF
+        a(f"C{b+7+k}", 16.6, 0.85 + 1.2 * k, 0, "B")
+    a(f"C{b+12}", 18.6, 2.2, 90, "B")
     # bottom: low-side gate pull-downs (to GND) beside each GL escape via
     for k, x in enumerate(FX):
         a(f"R{b+3+k}", x - 2.6, 7.3, 180, "B")
-    # bottom: bus caps from the VBAT pour (under FETs) to the GND strip
-    for k, x in enumerate(FX):
-        a(f"C{b+10+k}", x - 0.3, 3.45, 90, "B")
-    # bottom: BEMF dividers + neutral network in the GND strip under the phase pads
-    bemf = [f"R{b+i}" for i in (7, 8, 9, 10, 11, 12, 13, 14, 15, 16)]
-    slots = [(3.6 + 2.0 * i, 0.85) for i in range(8)] + [(4.2, 2.15), (10.0, 2.15)]
-    for ref, (x, y) in zip(bemf, slots):
+    # bottom middle band: BEMF dividers, neutral network and BEMF filter caps
+    parts = [f"R{b+i}" for i in (7, 8, 9, 10, 11, 12, 13, 14, 15, 16)] + [f"C{b+15+k}" for k in range(3)]
+    slots = [(4.4 + 2.05 * i, 8.25) for i in range(7)] + [(4.4 + 2.05 * i, 9.3) for i in range(6)]
+    for ref, (x, y) in zip(parts, slots):
         a(ref, x, y, 0, "B")
-    # bottom: MCU and its support at the right
-    a(f"U{b+1}", 24.3, 4.2, 180, "B")
+    # bottom right: MCU and its support, clear of the driver
+    a(f"U{b+1}", 24.7, 4.2, 180, "B")
     for i, ref in enumerate((f"C{b+1}", f"C{b+3}", f"C{b+4}", f"R{b+1}", f"R{b+2}")):
-        a(ref, 20.5, 1.0 + 1.15 * i, 0, "B")
-    a(f"C{b+2}", 24.6, 7.4, 0, "B")              # VDD pin 17
-    a(f"R{b+6}", 20.6, 6.75, 0, "B")             # INA output filter R
-    a(f"C{b+14}", 22.6, 7.4, 0, "B")             # filter C at PA6
+        a(ref, 20.95, 1.0 + 1.15 * i, 0, "B")
+    a(f"C{b+2}", 25.0, 7.4, 0, "B")              # VDD pin 17
+    a(f"R{b+6}", 20.95, 6.75, 0, "B")            # INA output filter R
+    a(f"C{b+14}", 23.0, 7.4, 0, "B")             # filter C at PA6
     # bottom: current-sense amp under BAT-, next to its shunt
     a(f"U{b+3}", 1.7, 8.0, 0, "B")
     a(f"C{b+13}", 1.7, 6.3, 0, "B")
-    # bottom: SWD pads, one row along the middle of the board
+    # top right corner: SWD pads for this MCU
     for i in range(3):
-        at(f"P{b+6+i}", (7.3 if m == 1 else 12.5) + 1.45 * i, 10.0, 0, "B")
+        a(f"P{b+6+i}", 21.2 + 1.45 * i, 1.0, 0)
 
 for m in (1, 2):
     per_motor(m)
@@ -98,17 +101,17 @@ for m in (1, 2):
 for ref, x, y in (("P104", 1.25, 14.75), ("P204", 3.25, 14.75), ("P3", 1.25, 16.6),
                   ("P4", 3.25, 16.6), ("P105", 1.25, 18.45), ("P205", 3.25, 18.45)):
     at(ref, x, y)
-# BEC: top right, between the two drivers
+# BEC: top right middle
 at("U1", 22.2, 10.0, 0); at("L1", 25.6, 9.9, 0)
 at("C9", 25.6, 7.275, 0); at("C10", 25.6, 12.525, 0)
 at("C6", 21.4, 7.6, 0); at("C7", 23.2, 7.6, 90); at("C8", 21.4, 12.15, 0)
 at("R3", 23.2, 12.4, 90); at("R4", 21.4, 13.1, 0)
-# bottom right middle: 3.3 V LDO and its caps, buck input cap
-at("U2", 26.0, 10.0, 90, "B"); at("C11", 22.3, 8.45, 0, "B"); at("C12", 22.3, 11.55, 0, "B")
-at("C5", 22.3, 10.0, 0, "B")
-# bottom middle: Vbat divider and SWD supply pads beside the SWD row
-at("R1", 17.05, 9.5, 0, "B"); at("R2", 17.05, 10.5, 0, "B")
-at("P5", 6.1, 10.0, 0, "B"); at("P6", 18.8, 10.0, 0, "B")
+at("C5", 21.9, 4.2, 90)                          # buck input 10 uF (top right, VBAT/GND by via)
+# 3.3 V LDO: top right, next to the BEC
+at("U2", 25.0, 4.0, 90); at("C11", 27.3, 2.6, 90); at("C12", 27.3, 5.4, 90)
+# SWD supply / ground pads, Vbat divider
+at("P5", 25.55, 1.0, 0); at("P6", 25.55, H - 1.0, 0)
+at("R1", 17.3, 9.3, 0, "B"); at("R2", 17.3, 10.7, 0, "B")
 
 OFFBOARD_X = W + 6.0
 
@@ -124,6 +127,8 @@ def load_fp(fpid):
 def main():
     board = pcbnew.NewBoard(PCB)
     board.SetCopperLayerCount(LAYERS)
+    for L in (pcbnew.In1_Cu, pcbnew.In2_Cu):     # plane layers: the router stays off them
+        board.SetLayerType(L, pcbnew.LT_POWER)
     nets = {}
     def net(n):
         if n not in nets:
@@ -155,10 +160,10 @@ def main():
         if y > 30: y, xo = 0.0, xo + 8
     power_copper(board, net)
     flush_zones(board, net)
-    flush_keepouts(board)
-    gnd_fill(board, net("GND"))
+    flush_keepouts(board)          # top/bottom GND fills are added by route_pcb.py after routing
     board.BuildConnectivity()
     pcbnew.SaveBoard(PCB, board)
+    set_stackup(PCB)
     write_rules()
     print(f"placed {len(PLACE)}, parked {len(park)}, nets {len(nets)}")
 
@@ -222,8 +227,8 @@ def add_via(board, netinfo, x, y, d=VIA_D, drill=VIA_DRILL):
 def power_copper(board, net):
     """Hand-drawn power copper. Top: phase nodes up/down to their pads,
     low-side source (LS) gaps + bus to the shunt, small VBAT islands at each
-    FET drain with vias. Bottom: VBAT pour under the FET rows (fed from BAT+),
-    GND everywhere else. Then a low-priority GND fill on both layers."""
+    FET drain with vias to the L3 VBAT plane. L2 is solid GND. BAT+ / BAT-
+    via arrays go to L3 / L2. Low-priority GND fill on top and bottom."""
     F, B = pcbnew.F_Cu, pcbnew.B_Cu
     for m, Y, s in ((1, Y1, 1), (2, Y2, -1)):
         yy = (lambda y: y) if m == 1 else (lambda y: H - y)   # mirror motor 2
@@ -234,6 +239,8 @@ def power_copper(board, net):
             KEEPOUT.setdefault(F, []).append(rect(x - 1.85, yy(0.8), x + 1.85, yy(3.25)))
             add_zone(board, net(f"M{m}_{p}"), F, [(x - 2.35, yy(0.3)), (x + 2.35, yy(0.3)), (x + 2.35, yy(3.75)),
                      (nx2, yy(3.75)), (nx2, yy(5.4)), (nx1, yy(5.4)), (nx1, yy(3.75)), (x - 2.35, yy(3.75))], prio=5)
+            # phase tap via (outside the keep-out) so the router can reach the node from the bottom
+            add_via(board, net(f"M{m}_{p}"), x + 2.05, yy(1.2))
             # LS gap beside the S2 pins, running into the LS bus; notched round the
             # low-side gate pin (G2) and its escape via
             o, i = (x - 2.6, x - 1.9) if m == 1 else (x + 2.6, x + 1.9)
@@ -249,21 +256,29 @@ def power_copper(board, net):
             # VBAT island: drain pins + pad 10, with vias to the bottom VBAT pour
             vx1, vx2 = (x + 0.389, x + 2.25) if m == 1 else (x - 2.25, x - 0.389)
             add_zone(board, net("VBAT"), F, rect(vx1, yy(Y1 - 1.3), vx2, yy(Y1 + 0.55)), prio=4)
+            # vias down to the L3 VBAT plane: in pad 10 and beside the drain pins.
+            # FET B sits over the driver (bottom), so its vias stay clear of the driver pads;
+            # FET C's gap is over the MCU support column.
             vi = x + 1.95 * d
-            if k < 2:                       # FET C's gap is under the driver's caps / MCU column
-                for dy in (-0.95, -0.25):
-                    add_via(board, net("VBAT"), vi, yy(Y1 + dy))
-            for dy in (-0.95, -0.32, 0.32, 0.95):
+            if k == 0:
+                gap, pad10 = (-0.95, -0.25), (-0.95, -0.32, 0.32, 0.95)
+            elif k == 1:
+                gap, pad10 = (0.45,), (0.45, 1.05)
+            else:
+                gap, pad10 = (), (-0.95, -0.32, 0.32, 0.95)
+            for dy in gap:
+                add_via(board, net("VBAT"), vi, yy(Y1 + dy))
+            for dy in pad10:
                 add_via(board, net("VBAT"), x + 0.672 * d, yy(Y1 + dy))
         # M2 LS gap for FET1 is on its right, so the shunt pad needs its own patch
         add_zone(board, net(f"M{m}_LS"), F, rect(4.2, yy(6.3), 5.6, yy(8.4)), prio=4)
         # LS bus under the FET row, from the shunt to the last FET
         add_zone(board, net(f"M{m}_LS"), F, rect(5.6, yy(7.45), 20.3, yy(9.65)), prio=4)
-        # bottom VBAT pour under the FET row
-        add_zone(board, net("VBAT"), B, rect(3.4, yy(3.75), 18.9, yy(6.6)), prio=3)
-    # bottom VBAT: BAT+ area and the left column joining both FET rows
-    add_zone(board, net("VBAT"), B, rect(0.3, 0.3 + 3.4, 3.4, 5.75), prio=3)
-    add_zone(board, net("VBAT"), B, rect(3.4, 3.75, 5.5, H - 3.75), prio=3)
+        add_via(board, net(f"M{m}_LS"), 5.95, yy(9.25))      # LS tap for the INA186 Kelvin lead
+    # inner planes: L2 (In1) solid GND, L3 (In2) VBAT over the power area, GND beyond
+    make_zone(board, net("GND"), pcbnew.In1_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, W, H)], 1, False)
+    make_zone(board, net("VBAT"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, 24.0, H)], 2, False)
+    make_zone(board, net("GND"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(24.4, 0, W, H)], 1, False)
     # top GND at BAT- and the shunt ground ends
     add_zone(board, net("GND"), F, rect(0.3, 6.1, 3.1, 13.9), prio=3)
     # via arrays: BAT+ to bottom VBAT, BAT- to bottom GND
@@ -273,15 +288,41 @@ def power_copper(board, net):
         for y in (9.3, 10.0, 10.7):
             add_via(board, net("GND"), x, y)
 
+STACKUP = """		(stackup
+			(layer "F.SilkS" (type "Top Silk Screen"))
+			(layer "F.Paste" (type "Top Solder Paste"))
+			(layer "F.Mask" (type "Top Solder Mask") (thickness 0.01))
+			(layer "F.Cu" (type "copper") (thickness 0.07))
+			(layer "dielectric 1" (type "prepreg") (thickness 0.2104) (material "FR4") (epsilon_r 4.4) (loss_tangent 0.02))
+			(layer "In1.Cu" (type "copper") (thickness 0.0152))
+			(layer "dielectric 2" (type "core") (thickness 1.065) (material "FR4") (epsilon_r 4.6) (loss_tangent 0.02))
+			(layer "In2.Cu" (type "copper") (thickness 0.0152))
+			(layer "dielectric 3" (type "prepreg") (thickness 0.2104) (material "FR4") (epsilon_r 4.4) (loss_tangent 0.02))
+			(layer "B.Cu" (type "copper") (thickness 0.07))
+			(layer "B.Mask" (type "Bottom Solder Mask") (thickness 0.01))
+			(layer "B.Paste" (type "Bottom Solder Paste"))
+			(layer "B.SilkS" (type "Bottom Silk Screen"))
+			(copper_finish "None")
+			(dielectric_constraints no)
+		)
+"""
+def set_stackup(path):
+    """4-layer 1.6 mm (JLC04161H-7628 style), 2 oz outer / 0.5 oz inner. pcbnew's
+    Python API can't edit the stackup, so it is written into (setup)."""
+    s = open(path, encoding="utf8").read()
+    s = re.sub(r"\n\t\t\(stackup\n.*?\n\t\t\)\n", "\n", s, flags=re.S)
+    s = s.replace("\t(setup\n", "\t(setup\n" + STACKUP, 1)
+    open(path, "w", encoding="utf8").write(s)
+
 def gnd_fill(board, gnd):
     """Whole-board GND fill on both layers, lowest priority (added after routing)."""
-    for L in (pcbnew.F_Cu, pcbnew.B_Cu) + ((pcbnew.In1_Cu,) if LAYERS == 4 else ()):
+    for L in (pcbnew.F_Cu, pcbnew.B_Cu):
         make_zone(board, gnd, L, [(mm(OX + x), mm(OY + y)) for x, y in rect(0.0, 0.0, W, H)], 0, True)
 
 # ------------------------------------------------------------- design rules
 NETCLASSES = [
-    dict(name="Default", clearance=0.15, track_width=0.2, via_diameter=0.5, via_drill=0.25),
-    dict(name="Gate", clearance=0.15, track_width=0.25, via_diameter=0.5, via_drill=0.25),
+    dict(name="Default", clearance=0.13, track_width=0.2, via_diameter=0.45, via_drill=0.2),
+    dict(name="Gate", clearance=0.13, track_width=0.25, via_diameter=0.45, via_drill=0.2),
     dict(name="Power", clearance=0.15, track_width=0.3, via_diameter=0.5, via_drill=0.25),
 ]
 PATTERNS = [("Gate", "M?_GH?"), ("Gate", "M?_GL?"), ("Gate", "M?_A"), ("Gate", "M?_B"), ("Gate", "M?_C"),
@@ -297,7 +338,7 @@ def write_rules():
     ns["netclass_patterns"] = [dict(netclass=c, pattern=p) for c, p in PATTERNS]
     ns["meta"] = {"version": 4}
     ds = pro.setdefault("board", {}).setdefault("design_settings", {})
-    ds.setdefault("rules", {}).update(dict(min_clearance=0.15, min_track_width=0.15, min_via_diameter=0.45,
+    ds.setdefault("rules", {}).update(dict(min_clearance=0.13, min_track_width=0.15, min_via_diameter=0.45,
         min_through_hole_diameter=0.2, min_via_annular_width=0.1, min_copper_edge_clearance=0.3,
         min_hole_to_hole=0.25, min_hole_clearance=0.2, min_connection=0.12, solder_mask_to_copper_clearance=0.0))
     pro.setdefault("meta", {"filename": "dual_esc.kicad_pro", "version": 3})

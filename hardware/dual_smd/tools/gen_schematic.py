@@ -115,6 +115,8 @@ def motor(m):
     for p in "ABC":
         add(R(), "R", "10k", "r0402", {"1": n(p), "2": n("NEUT")})
     add(R(), "R", "1.5k", "r0402", {"1": n("NEUT"), "2": "GND"})
+    for p in "ABC":                                   # BEMF filter caps (C{b+15}-{b+17})
+        add(f"C{b+15+'ABC'.index(p)}", "C", "1nF", "c0402", {"1": n("BEMF_" + p), "2": "GND"})
     # pads
     for k, p in enumerate("ABC"):
         add(f"P{b+k+1}", "PAD", f"M{m} {p}", "phase", {"1": n(p)})

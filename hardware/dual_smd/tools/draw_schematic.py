@@ -265,13 +265,14 @@ def motor(m, OX, OY):
     cap_to_gnd(f"C{b+14}", IX + 12, ys)
     # BEMF dividers and virtual neutral
     BX = Qx + 36
-    text("BEMF dividers 10k / 4.7k (8.4 V -> 2.7 V) and virtual neutral 3 x 10k / 1.5k", BX - 2, OY - 6, 1.27)
+    text("BEMF dividers 10k / 4.7k (8.4 V -> 2.7 V) + 1 nF, virtual neutral 3 x 10k / 1.5k", BX - 2, OY - 6, 1.27)
     for k, (p, rt, rb) in enumerate((("A", 7, 8), ("B", 9, 10), ("C", 11, 12))):
         y = OY + 6 * k
         label(N(p), BX, y, "L"); wire((BX, y), (BX + 2, y))
         place(f"R{b+rt}", "R_H", BX + 4, y)            # pins BX+2 / BX+6
         wire((BX + 6, y), (BX + 14, y)); label(N("BEMF_" + p), BX + 14, y)
         place(f"R{b+rb}", "R_V", BX + 9, y + 2); pwr("GND", BX + 9, y + 4)
+        cap_to_gnd(f"C{b+15+k}", BX + 12, y)            # 1 nF BEMF filter
     yN = OY + 22
     for k, p in enumerate("ABC"):
         y = yN + 3 * k

@@ -140,7 +140,7 @@
       },
       "rules": {
         "max_error": 0.005,
-        "min_clearance": 0.15,
+        "min_clearance": 0.13,
         "min_connection": 0.12,
         "min_copper_edge_clearance": 0.3,
         "min_groove_width": 0.0,
@@ -271,7 +271,7 @@
     "classes": [
       {
         "bus_width": 12,
-        "clearance": 0.15,
+        "clearance": 0.13,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
@@ -284,13 +284,13 @@
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.2,
         "tuning_profile": "",
-        "via_diameter": 0.5,
-        "via_drill": 0.25,
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
+        "clearance": 0.13,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
@@ -303,8 +303,8 @@
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.25,
         "tuning_profile": "",
-        "via_diameter": 0.5,
-        "via_drill": 0.25,
+        "via_diameter": 0.45,
+        "via_drill": 0.2,
         "wire_width": 6
       },
       {
