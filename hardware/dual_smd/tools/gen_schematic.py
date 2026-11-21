@@ -78,8 +78,8 @@ def motor(m):
     U_MCU, U_DRV, U_INA = f"U{b+1}", f"U{b+2}", f"U{b+3}"
     add(U_MCU, "AT32F421K8U7", "AT32F421K8U7-4", "mcu", {k: n(v) for k, v in MCU_PINS.items()}, "AT32F421K8U7-4")
     drv = {"1": "INLA", "2": "INLB", "3": "INLC", "4": "VBAT", "5": None, "6": "GND", "7": None, "8": None,
-           "9": "GLC", "10": "GLB", "11": "GLA", "12": "C", "13": "GHC", "14": "BSTC",
-           "15": "B", "16": "GHB", "17": "BSTB", "18": "A", "19": "GHA", "20": "BSTA",
+           "9": "GLC_D", "10": "GLB_D", "11": "GLA_D", "12": "C", "13": "GHC_D", "14": "BSTC",
+           "15": "B", "16": "GHB_D", "17": "BSTB", "18": "A", "19": "GHA_D", "20": "BSTA",
            "21": None, "22": "INHA", "23": "INHB", "24": "INHC", "25": "GND"}
     add(U_DRV, "DRV8300DRGE", "DRV8300DRGER", "drv", {k: n(v) for k, v in drv.items()}, "DRV8300DRGER")
     r = iter(range(b + 1, b + 99)); c = iter(range(b + 1, b + 99))
@@ -102,6 +102,8 @@ def motor(m):
             {"1": n("GH" + p), "2": "VBAT", "3": "VBAT", "4": "VBAT", "10": "VBAT",
              "9": n(p), "5": n("LS"), "6": n("LS"), "7": n("LS"), "8": n("GL" + p)}, "AON7934")
         add(R(), "R", "10k", "r0201", {"1": n("GL" + p), "2": "GND"})  # low-side gate pull-down (to GND: LS is GND + mV)
+        add(f"R{b+20+k}", "R", "4.7R", "r0201", {"1": n("GH" + p + "_D"), "2": n("GH" + p)})   # gate series R, high side
+        add(f"R{b+23+k}", "R", "4.7R", "r0201", {"1": n("GL" + p + "_D"), "2": n("GL" + p)})   # gate series R, low side
         add(C(), "C", "10uF 25V", "c0805", {"1": "VBAT", "2": "GND"})     # bus cap at each half-bridge
     # current sense: low-side shunt, INA186A1 (25 V/V) -> 12.5 mV/A
     add(f"R{b+50}", "R_SHUNT", "0R0005", "shunt", {"1": n("LS"), "2": "GND"}, "e.g. WSLP1206R0005 (verify)")

@@ -27,7 +27,8 @@ FPDIR = os.path.normpath(os.path.join(BIN, "..", "share", "kicad", "footprints")
 LIBS = {"OpenESC_dual": os.path.join(KD, "OpenESC_dual.pretty")}
 FREEROUTING = os.path.expandvars(r"%LOCALAPPDATA%\freerouting\freerouting.exe")
 
-W, H = 28.0, 20.0
+W, H = 31.0, 20.0
+WIDEN = 3.0                    # 28 -> 31 mm: everything right of x = 20.8 moves right
 LAYERS = 4                     # L1 signal+power, L2 GND, L3 VBAT (+GND), L4 signal+power
 OX, OY = 100.0, 100.0
 mm = pcbnew.FromMM
@@ -40,7 +41,9 @@ def sym_uuid(ref): return str(uuid.uuid5(SCH_NS, "/".join(("s", ref))))
 # ------------------------------------------------------------------ placement
 # (x, y) mm from the board's top-left corner seen from the top; rot CCW deg.
 PLACE = {}
-def at(ref, x, y, rot=0, side="F"): PLACE[ref] = (x, y, rot, side)
+def at(ref, x, y, rot=0, side="F"):
+    if x >= 20.8: x += WIDEN       # MCU / BEC / LDO / SWD side opens a channel next to the drivers
+    PLACE[ref] = (x, y, rot, side)
 
 FX = [7.6, 12.8, 18.0]           # half-bridge column centres (both motors)
 Y1, Y2 = 5.4, 14.6               # FET row centres, motor 1 (top) and motor 2
@@ -65,22 +68,27 @@ def per_motor(m):
     R = (lambda r: r) if m == 1 else (lambda r: (360 - r) % 360)
     a = lambda ref, x, y, rot=0, side="F": at(ref, x, Y(y), R(rot), side)
     # bottom: gate driver under the middle phase pad, gate/SH pins toward the FETs
-    a(f"U{b+2}", FX[1], 2.95, 0, "B")
+    # clear of the edge and of FET B's VBAT vias (left of them for M1, right for the mirrored M2)
+    a(f"U{b+2}", 11.65 if m == 1 else 13.95, 3.3, 0, "B")
     # bottom, left of the driver: bus caps of FETs A and B, GVDD caps
     a(f"C{b+10}", 4.3, 2.2, 90, "B"); a(f"C{b+11}", 6.4, 2.2, 90, "B")
-    a(f"C{b+5}", 8.25, 2.2, 90, "B"); a(f"C{b+6}", 9.55, 2.2, 90, "B")
+    a(f"C{b+5}", 8.25, 2.2, 90, "B"); a(f"C{b+6}", *((6.4, 4.5) if m == 1 else (5.0, 4.7)), 0, "B")
     # bottom, right of the driver: bootstrap caps, bus cap of FET C
     for k in range(3):
-        a(f"C{b+7+k}", 16.6, 0.85 + 1.2 * k, 0, "B")
-    a(f"C{b+12}", 18.6, 2.2, 90, "B")
+        a(f"C{b+7+k}", 16.6 if m == 1 else 17.65, 0.85 + 1.2 * k, 0, "B")
+    a(f"C{b+12}", 18.6 if m == 1 else 19.65, 2.2, 90, "B")
     # bottom: low-side gate pull-downs (to GND) beside each GL escape via
+    dd = 1 if m == 1 else -1
     for k, x in enumerate(FX):
-        a(f"R{b+3+k}", x - 2.6, 7.3, 180, "B")
+        a(f"R{b+3+k}", x - 2.6 * dd, 6.8, 180 if m == 1 else 0, "B")
+        # 4.7R gate series resistors beside the gate escape vias (GH via x + 1.38*dd, GL via x - 1.38*dd)
+        a(f"R{b+20+k}", x + 1.38 * dd, 7.85, 0, "B")
+        a(f"R{b+23+k}", x - 1.38 * dd, 7.85, 0, "B")
     # bottom middle band: BEMF dividers, neutral network and BEMF filter caps
     parts = [f"R{b+i}" for i in (7, 8, 9, 10, 11, 12, 13, 14, 15, 16)] + [f"C{b+15+k}" for k in range(3)]
-    slots = [(4.6 + 1.65 * i, 8.0) for i in range(7)] + [(4.6 + 1.65 * i, 8.9) for i in range(6)]   # 0201
+    slots = [(6.75 + 1.2 * i, 9.05) for i in range(13)]           # one row of vertical 0201s, track-wide gaps
     for ref, (x, y) in zip(parts, slots):
-        a(ref, x, y, 0, "B")
+        a(ref, x, y, 90, "B")
     # bottom right: MCU and its support, clear of the driver
     a(f"U{b+1}", 24.7, 4.2, 180, "B")
     for i, ref in enumerate((f"C{b+1}", f"C{b+3}", f"C{b+4}", f"R{b+1}", f"R{b+2}")):
@@ -250,7 +258,8 @@ def power_copper(board, net):
             add_zone(board, net(f"M{m}_{p}"), F, [(x - 2.35, yy(0.3)), (x + 2.35, yy(0.3)), (x + 2.35, yy(3.75)),
                      (nx2, yy(3.75)), (nx2, yy(5.4)), (nx1, yy(5.4)), (nx1, yy(3.75)), (x - 2.35, yy(3.75))], prio=5)
             # phase tap via (outside the keep-out) so the router can reach the node from the bottom
-            add_via(board, net(f"M{m}_{p}"), *((15.0, yy(0.65)) if k == 1 else (x + 2.05, yy(1.2))))
+            tap = (x + 2.05, yy(1.2)) if k != 1 else ((15.0, yy(0.65)) if m == 1 else (10.8, yy(0.65)))
+            add_via(board, net(f"M{m}_{p}"), *tap)
             # LS gap beside the S2 pins, running into the LS bus; notched round the
             # low-side gate pin (G2) and its escape via
             o, i = (x - 2.6, x - 1.9) if m == 1 else (x + 2.6, x + 1.9)
@@ -269,11 +278,11 @@ def power_copper(board, net):
             # vias down to the L3 VBAT plane: in pad 10 and beside the drain pins.
             # FET B sits over the driver (bottom), so its vias stay clear of the driver pads;
             # FET C's gap is over the MCU support column.
-            vi = x + 1.95 * d
+            vi = x + (2.05 if k == 1 else 1.95) * d
             if k == 0:
-                gap, pad10 = (-0.95, -0.25), (-0.95, -0.32, 0.32, 0.95)
+                gap, pad10 = (), (-0.95, -0.32, 0.32, 0.95)          # gap is in front of the driver
             elif k == 1:
-                gap, pad10 = (0.45,), (0.45, 1.05)
+                gap, pad10 = (0.2,), (-0.32, 0.32, 0.95)
             else:
                 gap, pad10 = (), (-0.95, -0.32, 0.32, 0.95)
             for dy in gap:
@@ -287,8 +296,8 @@ def power_copper(board, net):
         add_via(board, net(f"M{m}_LS"), 5.95, yy(9.25))      # LS tap for the INA186 Kelvin lead
     # inner planes: L2 (In1) solid GND, L3 (In2) VBAT over the power area, GND beyond
     make_zone(board, net("GND"), pcbnew.In1_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, W, H)], 1, False)
-    make_zone(board, net("VBAT"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, 24.0, H)], 2, False)
-    make_zone(board, net("GND"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(24.4, 0, W, H)], 1, False)
+    make_zone(board, net("VBAT"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, 24.0 + WIDEN, H)], 2, False)
+    make_zone(board, net("GND"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(24.4 + WIDEN, 0, W, H)], 1, False)
     # top GND at BAT- and the shunt ground ends
     add_zone(board, net("GND"), F, rect(0.3, 6.1, 3.1, 13.9), prio=3)
     # via arrays: BAT+ to bottom VBAT, BAT- to bottom GND
@@ -336,7 +345,7 @@ NETCLASSES = [
     dict(name="Power", clearance=0.15, track_width=0.3, via_diameter=0.5, via_drill=0.25),
     dict(name="Plane", clearance=0.15, track_width=0.3, via_diameter=0.4, via_drill=0.2),
 ]
-PATTERNS = [("Gate", "M?_GH?"), ("Gate", "M?_GL?"), ("Gate", "M?_A"), ("Gate", "M?_B"), ("Gate", "M?_C"),
+PATTERNS = [("Gate", "M?_GH?"), ("Gate", "M?_GL?"), ("Gate", "M?_G??_D"), ("Gate", "M?_A"), ("Gate", "M?_B"), ("Gate", "M?_C"),
             ("Plane", "VBAT"), ("Plane", "GND"), ("Power", "M?_LS"),
             ("Power", "+5V"), ("Power", "BEC_SW")]
 def write_rules():

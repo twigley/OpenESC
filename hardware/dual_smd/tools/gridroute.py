@@ -72,7 +72,7 @@ class Grid:
         if o == FREE: arr[k] = nid
         elif o != nid: arr[k] = MULTI
 
-    def raster(self, shape_fn, bbox, nid, layer, is_via=False):
+    def raster(self, shape_fn, bbox, nid, layer, is_via=False, via_block=True):
         """shape_fn(pos, r) -> collides within r; mark cu/trk/via owners."""
         pad = mm(CLR + 0.2 + 0.05)
         i0 = max(0, int((bbox.GetLeft() - pad - self.x0) / mm(G)))
@@ -83,7 +83,7 @@ class Grid:
             for i in range(i0, i1 + 1):
                 p = self.cell(i, j); k = j * self.nx + i
                 if shape_fn(p, CLR + VIA_D / 2):
-                    self.mark(self.via, k, nid)
+                    if via_block: self.mark(self.via, k, nid)
                     if layer is not None and shape_fn(p, CLR + 0.125):
                         self.mark(self.trk[layer], k, nid)
                         if shape_fn(p, 0.0):
@@ -120,7 +120,8 @@ class Grid:
         for L in LAYERS:
             if not z.IsOnLayer(L): continue
             fn = lambda p, rr, L=L: z.HitTestFilledArea(L, p, mm(rr))
-            self.raster(fn, z.GetBoundingBox(), nid, L)
+            # zones refill round a foreign via, so they block tracks but not vias
+            self.raster(fn, z.GetBoundingBox(), nid, L, via_block=False)
 
     def ok_trk(self, L, k, nid):
         o = self.trk[L][k]; return o == FREE or o == nid

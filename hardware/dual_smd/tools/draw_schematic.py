@@ -237,9 +237,9 @@ def motor(m, OX, OY):
         wire((Qx + 4, Y), (Qx + 7, Y), (Qx + 16, Y))
         label(N(p), Qx + 11, Y)
         place(f"P{b+k+1}", "PAD", Qx + 17, Y)
-        # gates (no series resistor: space; DRV8300 drive strength sets the edges)
-        wire((Dxr, Y - 2), (Qx - 3, Y - 2))
-        wire((Dxr, Y + 2), (Qx - 3, Y + 2))
+        # gates through 4.7R series resistors (pins at Dxr+1 / Dxr+5)
+        place(f"R{b+20+k}", "R_H", Dxr + 3, Y - 2); wire((Dxr, Y - 2), (Dxr + 1, Y - 2)); wire((Dxr + 5, Y - 2), (Qx - 3, Y - 2))
+        place(f"R{b+23+k}", "R_H", Dxr + 3, Y + 2); wire((Dxr, Y + 2), (Dxr + 1, Y + 2)); wire((Dxr + 5, Y + 2), (Qx - 3, Y + 2))
         place(f"R{b+3+k}", "R_V", Qx - 5, Y + 4); pwr("GND", Qx - 5, Y + 6)   # 10k GL pull-down
         # drain to VBAT, source to the LS rail
         wire((Qx + 1, Y - 5), (Qx + 1, Y - 6), (Qx + 3, Y - 6)); pwr("VBAT", Qx + 3, Y - 6)
