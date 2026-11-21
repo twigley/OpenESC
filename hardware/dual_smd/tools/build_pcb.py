@@ -78,15 +78,15 @@ def per_motor(m):
         a(f"R{b+3+k}", x - 2.6, 7.3, 180, "B")
     # bottom middle band: BEMF dividers, neutral network and BEMF filter caps
     parts = [f"R{b+i}" for i in (7, 8, 9, 10, 11, 12, 13, 14, 15, 16)] + [f"C{b+15+k}" for k in range(3)]
-    slots = [(4.4 + 2.05 * i, 8.25) for i in range(7)] + [(4.4 + 2.05 * i, 9.3) for i in range(6)]
+    slots = [(4.6 + 1.65 * i, 8.0) for i in range(7)] + [(4.6 + 1.65 * i, 8.9) for i in range(6)]   # 0201
     for ref, (x, y) in zip(parts, slots):
         a(ref, x, y, 0, "B")
     # bottom right: MCU and its support, clear of the driver
     a(f"U{b+1}", 24.7, 4.2, 180, "B")
     for i, ref in enumerate((f"C{b+1}", f"C{b+3}", f"C{b+4}", f"R{b+1}", f"R{b+2}")):
-        a(ref, 20.95, 1.0 + 1.15 * i, 0, "B")
+        a(ref, 21.1, 1.0 + 1.15 * i, 0, "B")
     a(f"C{b+2}", 25.0, 7.4, 0, "B")              # VDD pin 17
-    a(f"R{b+6}", 20.95, 6.75, 0, "B")            # INA output filter R
+    a(f"R{b+6}", 21.3, 6.75, 0, "B")            # INA output filter R
     a(f"C{b+14}", 23.0, 7.4, 0, "B")             # filter C at PA6
     # bottom: current-sense amp under BAT-, next to its shunt
     a(f"U{b+3}", 1.7, 8.0, 0, "B")
@@ -111,7 +111,7 @@ at("C5", 21.9, 4.2, 90)                          # buck input 10 uF (top right, 
 at("U2", 25.0, 4.0, 90); at("C11", 27.3, 2.6, 90); at("C12", 27.3, 5.4, 90)
 # SWD supply / ground pads, Vbat divider
 at("P5", 25.55, 1.0, 0); at("P6", 25.55, H - 1.0, 0)
-at("R1", 17.3, 9.3, 0, "B"); at("R2", 17.3, 10.7, 0, "B")
+at("R1", 24.0, 14.6, 0); at("R2", 24.0, 15.5, 0)      # Vbat divider on top
 
 OFFBOARD_X = W + 6.0
 
@@ -160,7 +160,9 @@ def main():
         if y > 30: y, xo = 0.0, xo + 8
     power_copper(board, net)
     flush_zones(board, net)
-    flush_keepouts(board)          # top/bottom GND fills are added by route_pcb.py after routing
+    if os.environ.get("ESC_KEEPOUTS", "0") == "1":
+        flush_keepouts(board)      # only for a Freerouting run (route_pcb.py)
+    KEEPOUT.clear()                # top/bottom GND fills are added after routing
     board.BuildConnectivity()
     pcbnew.SaveBoard(PCB, board)
     set_stackup(PCB)
@@ -188,6 +190,14 @@ def flush_keepouts(board):
             for x, y in pts: one.Append(mm(OX + x), mm(OY + y))
             ps.BooleanAdd(one)
         ps.Simplify()
+        # holes round every pre-placed via, so the router doesn't see them as violations
+        for v in board.GetTracks():
+            if isinstance(v, pcbnew.PCB_VIA):
+                c, h = v.GetPosition(), mm(0.45)
+                sq = pcbnew.SHAPE_POLY_SET(); sq.NewOutline()
+                for dx, dy in ((-h, -h), (h, -h), (h, h), (-h, h)): sq.Append(c.x + dx, c.y + dy)
+                ps.BooleanSubtract(sq)
+        ps.Fracture()
         for i in range(ps.OutlineCount()):
             ch = ps.COutline(i)
             z = pcbnew.ZONE(board); z.SetIsRuleArea(True); z.SetLayer(layer)
@@ -240,7 +250,7 @@ def power_copper(board, net):
             add_zone(board, net(f"M{m}_{p}"), F, [(x - 2.35, yy(0.3)), (x + 2.35, yy(0.3)), (x + 2.35, yy(3.75)),
                      (nx2, yy(3.75)), (nx2, yy(5.4)), (nx1, yy(5.4)), (nx1, yy(3.75)), (x - 2.35, yy(3.75))], prio=5)
             # phase tap via (outside the keep-out) so the router can reach the node from the bottom
-            add_via(board, net(f"M{m}_{p}"), x + 2.05, yy(1.2))
+            add_via(board, net(f"M{m}_{p}"), *((15.0, yy(0.65)) if k == 1 else (x + 2.05, yy(1.2))))
             # LS gap beside the S2 pins, running into the LS bus; notched round the
             # low-side gate pin (G2) and its escape via
             o, i = (x - 2.6, x - 1.9) if m == 1 else (x + 2.6, x + 1.9)
@@ -324,9 +334,10 @@ NETCLASSES = [
     dict(name="Default", clearance=0.13, track_width=0.2, via_diameter=0.45, via_drill=0.2),
     dict(name="Gate", clearance=0.13, track_width=0.25, via_diameter=0.45, via_drill=0.2),
     dict(name="Power", clearance=0.15, track_width=0.3, via_diameter=0.5, via_drill=0.25),
+    dict(name="Plane", clearance=0.15, track_width=0.3, via_diameter=0.4, via_drill=0.2),
 ]
 PATTERNS = [("Gate", "M?_GH?"), ("Gate", "M?_GL?"), ("Gate", "M?_A"), ("Gate", "M?_B"), ("Gate", "M?_C"),
-            ("Power", "VBAT"), ("Power", "GND"), ("Power", "M?_LS"),
+            ("Plane", "VBAT"), ("Plane", "GND"), ("Power", "M?_LS"),
             ("Power", "+5V"), ("Power", "BEC_SW")]
 def write_rules():
     pro = json.load(open(PRO)) if os.path.exists(PRO) else {}
@@ -338,7 +349,7 @@ def write_rules():
     ns["netclass_patterns"] = [dict(netclass=c, pattern=p) for c, p in PATTERNS]
     ns["meta"] = {"version": 4}
     ds = pro.setdefault("board", {}).setdefault("design_settings", {})
-    ds.setdefault("rules", {}).update(dict(min_clearance=0.13, min_track_width=0.15, min_via_diameter=0.45,
+    ds.setdefault("rules", {}).update(dict(min_clearance=0.13, min_track_width=0.15, min_via_diameter=0.4,
         min_through_hole_diameter=0.2, min_via_annular_width=0.1, min_copper_edge_clearance=0.3,
         min_hole_to_hole=0.25, min_hole_clearance=0.2, min_connection=0.12, solder_mask_to_copper_clearance=0.0))
     pro.setdefault("meta", {"filename": "dual_esc.kicad_pro", "version": 3})

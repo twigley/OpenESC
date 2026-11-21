@@ -112,25 +112,37 @@ offers 2 oz outer copper on 4-layer boards; confirm when ordering.
   C215-C217).
 - **Gate series resistors:** don't fit, so they are still left out.
 
-**Routing:** `tools/route_pcb.py` runs these steps:
+**0201:** 48 small-signal parts moved to 0201 (BEMF dividers, neutral
+network, BEMF filter caps, gate pull-downs, BOOT0 / SIG / INA-output
+resistors, MCU and INA 100 nF caps, NRST cap, ISENSE filter cap, Vbat
+divider). The GVDD and bootstrap caps (25 V), the 1 uF caps and the bus and
+bulk caps keep their larger sizes.
 
-1. Fans out every GND / VBAT pad to the planes with its own via (55 placed,
-   32 pads without room).
-2. Hands the remaining nets to Freerouting 2.5.0.
-3. Removes the router keep-outs.
-4. Adds the top / bottom GND fills and stitching vias.
+LCSC stock checked (2026-11-21):
+- 100 nF 10 V X5R 0201: C284966
+- 10 nF 25 V X7R 0201: C285010
+- 1 nF 50 V X7R 0201: C301887
+- 10k 0201 1 %: C6853700
+- Other resistor values: the UNI-ROYAL 0201WMF ±1 % series covers 1 R-10 M
+  (25 V), so they are in stock.
 
-Freerouting stalls at 86-94 unrouted connections with about 260 violations
-after 16 passes. The congestion is on the bottom around each driver and MCU:
+**Routing: not closed.**
 
-- the driver's gate and bootstrap pins (GH/GL/BST to the gate escape vias
-  and bootstrap caps)
-- the six INH/INL lines from MCU to driver
-- the BEMF / neutral / ISENSE lines into the MCU
-- +3V3 to both MCUs and the INAs
-- SWD / signal / telemetry pads
+- **Freerouting 2.5.0** (`tools/route_pcb.py`, run with router keep-outs
+  over the power copper) plateaus at 84-87 unrouted. The fixed-via
+  violations are fixed, but it will not use the inner planes or ignore the
+  GND / VBAT net class.
+- **Own grid router** (`tools/gridroute.py`, 0.05 mm grid, outer layers plus
+  vias, KiCad shapes as obstacles) routes the rest but leaves about 80
+  connections. Almost all are at the MCU and DRV8300 pins.
+- **Cause:** on the bottom, the fine-pitch pin rows, the support parts and
+  the GND / VBAT fanout vias leave only a 0.15-0.25 mm channel round each
+  MCU and driver. The six INH/INL lines, gates, BST and SH cannot all get
+  out.
 
-The committed board is the unrouted placement.
+The committed board is the unrouted placement. To close it, either move the
+MCU support parts to the top, or move the MCUs to the top right (the buck
+area) so each driver and MCU sits on its own face.
 
 ## Files
 
@@ -140,6 +152,7 @@ The committed board is the unrouted placement.
   readable sheet. Labels are used only between blocks.
 - `tools/check_schematic.py`: rebuilds connectivity from the drawn wires and
   fails unless it matches `PARTS`.
+- `tools/gridroute.py`: grid maze router for the outer layers (power fanout, then signal nets).
 - `tools/route_pcb.py`: power fanout, Freerouting run, keep-out removal, GND fill and stitching.
 - `tools/build_pcb.py`: builds `kicad/dual_esc.kicad_pcb`. It places the parts,
   draws the power copper as zones, and links each footprint to its schematic

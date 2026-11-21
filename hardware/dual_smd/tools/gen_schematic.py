@@ -39,6 +39,8 @@ FP = dict(
  ind="Inductor_SMD:L_Changjiang_FNR3015S",
  shunt="Resistor_SMD:R_1206_3216Metric",
  r0402="Resistor_SMD:R_0402_1005Metric",
+ r0201="Resistor_SMD:R_0201_0603Metric",
+ c0201="Capacitor_SMD:C_0201_0603Metric",
  c0402="Capacitor_SMD:C_0402_1005Metric",
  c0603="Capacitor_SMD:C_0603_1608Metric",
  c0805="Capacitor_SMD:C_0805_2012Metric",
@@ -83,12 +85,12 @@ def motor(m):
     r = iter(range(b + 1, b + 99)); c = iter(range(b + 1, b + 99))
     R = lambda: f"R{next(r)}"; C = lambda: f"C{next(c)}"
     # MCU support
-    add(C(), "C", "100nF", "c0402", {"1": "+3V3", "2": "GND"})          # VDD pin 1
-    add(C(), "C", "100nF", "c0402", {"1": "+3V3", "2": "GND"})          # VDD pin 17
+    add(C(), "C", "100nF 10V", "c0201", {"1": "+3V3", "2": "GND"})          # VDD pin 1
+    add(C(), "C", "100nF 10V", "c0201", {"1": "+3V3", "2": "GND"})          # VDD pin 17
     add(C(), "C", "1uF", "c0402", {"1": "+3V3", "2": "GND"})            # VDDA pin 5
-    add(C(), "C", "100nF", "c0402", {"1": n("NRST"), "2": "GND"})
-    add(R(), "R", "10k", "r0402", {"1": "GND", "2": n("BOOT0")})
-    add(R(), "R", "100R", "r0402", {"1": n("SIG"), "2": n("SIG_IN")})
+    add(C(), "C", "100nF 10V", "c0201", {"1": n("NRST"), "2": "GND"})
+    add(R(), "R", "10k", "r0201", {"1": "GND", "2": n("BOOT0")})
+    add(R(), "R", "100R", "r0201", {"1": n("SIG"), "2": n("SIG_IN")})
     # gate driver support
     add(C(), "C", "10uF 16V", "c0603", {"1": "VBAT", "2": "GND"})       # GVDD
     add(C(), "C", "100nF", "c0402", {"1": "VBAT", "2": "GND"})
@@ -99,24 +101,24 @@ def motor(m):
         add(f"Q{b+k+1}", "AON7934", "AON7934", "fet",
             {"1": n("GH" + p), "2": "VBAT", "3": "VBAT", "4": "VBAT", "10": "VBAT",
              "9": n(p), "5": n("LS"), "6": n("LS"), "7": n("LS"), "8": n("GL" + p)}, "AON7934")
-        add(R(), "R", "10k", "r0402", {"1": n("GL" + p), "2": "GND"})  # low-side gate pull-down (to GND: LS is GND + mV)
+        add(R(), "R", "10k", "r0201", {"1": n("GL" + p), "2": "GND"})  # low-side gate pull-down (to GND: LS is GND + mV)
         add(C(), "C", "10uF 25V", "c0805", {"1": "VBAT", "2": "GND"})     # bus cap at each half-bridge
     # current sense: low-side shunt, INA186A1 (25 V/V) -> 12.5 mV/A
     add(f"R{b+50}", "R_SHUNT", "0R0005", "shunt", {"1": n("LS"), "2": "GND"}, "e.g. WSLP1206R0005 (verify)")
     add(U_INA, "INA186A1", "INA186A1", "ina",
         {"1": "GND", "2": "GND", "3": "+3V3", "4": n("LS"), "5": "GND", "6": n("IOUT")}, "INA186A1IDCKR")
-    add(C(), "C", "100nF", "c0402", {"1": "+3V3", "2": "GND"})
-    add(R(), "R", "1k", "r0402", {"1": n("IOUT"), "2": n("ISENSE")})
-    add(C(), "C", "10nF", "c0402", {"1": n("ISENSE"), "2": "GND"})
+    add(C(), "C", "100nF 10V", "c0201", {"1": "+3V3", "2": "GND"})
+    add(R(), "R", "1k", "r0201", {"1": n("IOUT"), "2": n("ISENSE")})
+    add(C(), "C", "10nF 25V", "c0201", {"1": n("ISENSE"), "2": "GND"})
     # BEMF dividers (10k / 4.7k = 0.32) and virtual neutral (3 x 10k / 1.5k)
     for p in "ABC":
-        add(R(), "R", "10k", "r0402", {"1": n(p), "2": n("BEMF_" + p)})
-        add(R(), "R", "4.7k", "r0402", {"1": n("BEMF_" + p), "2": "GND"})
+        add(R(), "R", "10k", "r0201", {"1": n(p), "2": n("BEMF_" + p)})
+        add(R(), "R", "4.7k", "r0201", {"1": n("BEMF_" + p), "2": "GND"})
     for p in "ABC":
-        add(R(), "R", "10k", "r0402", {"1": n(p), "2": n("NEUT")})
-    add(R(), "R", "1.5k", "r0402", {"1": n("NEUT"), "2": "GND"})
+        add(R(), "R", "10k", "r0201", {"1": n(p), "2": n("NEUT")})
+    add(R(), "R", "1.5k", "r0201", {"1": n("NEUT"), "2": "GND"})
     for p in "ABC":                                   # BEMF filter caps (C{b+15}-{b+17})
-        add(f"C{b+15+'ABC'.index(p)}", "C", "1nF", "c0402", {"1": n("BEMF_" + p), "2": "GND"})
+        add(f"C{b+15+'ABC'.index(p)}", "C", "1nF 50V", "c0201", {"1": n("BEMF_" + p), "2": "GND"})
     # pads
     for k, p in enumerate("ABC"):
         add(f"P{b+k+1}", "PAD", f"M{m} {p}", "phase", {"1": n(p)})
@@ -140,8 +142,8 @@ for i in range(1, 5):
     add(f"C{i}", "CP", "220uF 16V", "bulk", {"1": "VBAT", "2": "GND"}, "low-ESR polymer/electrolytic, on battery leads")
     OFF_BOARD.add(f"C{i}")
 # Vbat sense divider, shared by both MCUs (100k / 10k, AM32 TARGET_VOLTAGE_DIVIDER 110)
-add("R1", "R", "100k", "r0402", {"1": "VBAT", "2": "VSENSE"})
-add("R2", "R", "10k", "r0402", {"1": "VSENSE", "2": "GND"})
+add("R1", "R", "100k", "r0201", {"1": "VBAT", "2": "VSENSE"})
+add("R2", "R", "10k", "r0201", {"1": "VSENSE", "2": "GND"})
 # 5 V BEC: TPS62933 buck, 1.2 MHz (RT to GND) so a 3 x 3 mm 2.2 uH inductor fits
 add("U1", "TPS62933", "TPS62933DRLR", "buck",
     {"1": "GND", "2": None, "3": "VBAT", "4": "GND", "5": "BEC_SW", "6": "BEC_BST", "7": "BEC_SS", "8": "BEC_FB"}, "TPS62933DRLR")

@@ -29,47 +29,55 @@ def route(board, passes):
     assert pcbnew.ExportSpecctraDSN(board, dsn)
     prepare_dsn(dsn)
     log = open(os.path.join(WORK, "freerouting.log"), "w")
-    subprocess.run([FREEROUTING, "-de", dsn, "-do", ses, "-mp", str(passes), "-mt", "7",
+    subprocess.run([FREEROUTING, "-de", dsn, "-do", ses, "-mp", str(passes), "-mt", "7", "-inc", "Plane",
                     "--gui.enabled=false"], stdout=log, stderr=subprocess.STDOUT, check=True)
     assert pcbnew.ImportSpecctraSES(board, ses)
 
 PLANE_NETS = ("GND", "VBAT")
 def prepare_dsn(path):
-    """GND and VBAT are served by the L2/L3 planes and by fanout vias placed
-    here beforehand, so the router gets them with one pin each (nothing to
-    route). All pre-placed copper is marked 'protect' so the router keeps it."""
+    """GND and VBAT (net class Plane, ignored by the router with -inc) are served
+    by the L2/L3 planes and the fanout vias placed beforehand. All pre-placed
+    copper is marked 'protect' so the router keeps it."""
     import re
     s = open(path).read()
-    for n in PLANE_NETS:
-        s = re.sub(r"(\(net %s\s*\(pins\s+)([^\s()]+)[^()]*\)" % re.escape(n), r"\g<1>\g<2>)", s, count=1)
     s = s.replace("(type route)", "(type protect)")
     # inner planes: the router would treat them as solid copper and refuse every
     # other-net via; KiCad fills them with via clearances afterwards anyway
     s = re.sub(r"\(plane \S+ \(polygon In[12]\.Cu [^()]*\)\)\s*", "", s)
     open(path, "w").write(s)
 
-def item_clear(board, pos, r, clr, net, layers, extra=()):
+def item_clear(board, pos, r, clr, net, layers, extra=(), zones=True):
     """True if a disc of radius r at pos keeps clr from every other-net item on
-    the given copper layers (tracks, vias incl. hole spacing, pads, zone fills)."""
-    acc = mm(r + clr)
+    the given copper layers (tracks, pads, zone fills; vias incl. hole spacing)."""
+    circ = pcbnew.SHAPE_CIRCLE(pos, mm(r))
+    c = mm(clr)
     for t in list(board.GetTracks()) + list(extra):
         if isinstance(t, pcbnew.PCB_VIA):
             dist = (t.GetPosition() - pos).EuclideanNorm()
-            need = mm(r) + t.GetWidth(pcbnew.F_Cu) / 2 + (mm(clr) if t.GetNetname() != net else mm(0.1))
+            need = mm(r) + t.GetWidth(pcbnew.F_Cu) / 2 + (c if t.GetNetname() != net else mm(0.1))
             if dist < need: return False
-        elif t.GetNetname() != net and t.GetLayer() in layers and t.HitTest(pos, acc):
-            return False
+        elif t.GetNetname() != net and t.GetLayer() in layers:
+            if t.GetEffectiveShape(t.GetLayer()).Collide(circ, c): return False
     for p in board.GetPads():
         if p.GetNetname() == net: continue
-        if any(p.IsOnLayer(L) for L in layers) and p.HitTest(pos, acc): return False
-    for z in board.Zones():
+        for L in layers:
+            if p.IsOnLayer(L) and p.GetEffectiveShape(L).Collide(circ, c): return False
+    for z in (board.Zones() if zones else ()):
         if z.GetIsRuleArea() or z.GetNetname() == net: continue
         for L in layers:
-            if L in (pcbnew.F_Cu, pcbnew.B_Cu) and z.IsOnLayer(L) and z.HitTestFilledArea(L, pos, acc):
+            if L in (pcbnew.F_Cu, pcbnew.B_Cu) and z.IsOnLayer(L) and z.HitTestFilledArea(L, pos, mm(r + clr)):
                 return False
     return True
 
-def fanout(board, nets=PLANE_NETS, d=0.45, drill=0.2):
+def seg_clear(board, a, b, w, clr, net, layer):
+    """Track a->b of width w clear of other-net items (sampled every 0.1 mm)."""
+    n = max(2, int((b - a).EuclideanNorm() / mm(0.1)))
+    for i in range(1, n):
+        p = pcbnew.VECTOR2I(a.x + (b.x - a.x) * i // n, a.y + (b.y - a.y) * i // n)
+        if not item_clear(board, p, w / 2, clr, net, (layer,)): return False
+    return True
+
+def fanout(board, nets=PLANE_NETS, d=0.4, drill=0.2):
     """Give every SMD pad of a plane net its own via to the plane: in the pad for
     big pads, otherwise just outside it with a short 0.3 mm track."""
     F, B = pcbnew.F_Cu, pcbnew.B_Cu
@@ -85,36 +93,85 @@ def fanout(board, nets=PLANE_NETS, d=0.45, drill=0.2):
         sz = p.GetSize()
         net = p.GetNet()
         if min(pcbnew.ToMM(sz.x), pcbnew.ToMM(sz.y)) >= 1.4:
-            spots = [c]                      # exposed pad / big pad: via in pad
+            g = mm(0.55)                     # exposed pad / big pad: vias in the pad
+            spots = [c + pcbnew.VECTOR2I(i * g, j * g) for i, j in
+                     ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1))]
         else:
             spots = []
-            for dist in (0.65, 0.8, 1.0, 1.25, 1.55):
+            for dist in (0.55, 0.7, 0.85, 1.0, 1.2, 1.45, 1.75, 2.1):
                 for k in range(16):
                     a = 2 * math.pi * k / 16
                     spots.append(c + pcbnew.VECTOR2I(int(mm(dist) * math.cos(a)), int(mm(dist) * math.sin(a))))
         edge = board.GetBoardEdgesBoundingBox()
-        m_e = mm(0.3 + d / 2)
+        m_e = mm(0.4 + d / 2)
         spots = [v for v in spots if edge.GetLeft() + m_e < v.x < edge.GetRight() - m_e
                  and edge.GetTop() + m_e < v.y < edge.GetBottom() - m_e]
         for v in spots:
-            if v != c and not p.HitTest(v, 0) is False and p.HitTest(v, mm(0.05)):
-                continue                      # skip spots still on the pad (small pads)
-            if not item_clear(board, v, d / 2, 0.15, n, (F, B)):
-                continue
-            if v != c:
-                mid = pcbnew.VECTOR2I((v.x + c.x) // 2, (v.y + c.y) // 2)
-                if not item_clear(board, mid, 0.15, 0.15, n, (L,)):
+            if min(pcbnew.ToMM(sz.x), pcbnew.ToMM(sz.y)) < 1.4 and p.HitTest(v, mm(0.25)):
+                continue                      # small pads: via must sit off the pad
+            if not item_clear(board, v, d / 2, 0.16, n, (F, B), zones=False):
+                continue                      # other-net zones refill round the via
+            if not p.HitTest(v, 0):
+                if not seg_clear(board, c, v, 0.25, 0.16, n, L):
                     continue
-                t = pcbnew.PCB_TRACK(board); t.SetStart(c); t.SetEnd(v); t.SetWidth(mm(0.3))
+                t = pcbnew.PCB_TRACK(board); t.SetStart(c); t.SetEnd(v); t.SetWidth(mm(0.25))
                 t.SetLayer(L); t.SetNet(net); board.Add(t)
             via = pcbnew.PCB_VIA(board); via.SetPosition(v); via.SetWidth(mm(d)); via.SetDrill(mm(drill))
             via.SetNet(net); board.Add(via)
             done += 1
             break
         else:
-            missed += 1
-            print("no fanout for", p.GetParentFootprint().GetReference(), p.GetNumber(), n)
+            if tie_to_neighbour(board, p, L):
+                done += 1
+            else:
+                missed += 1
+                print("no fanout for", p.GetParentFootprint().GetReference(), p.GetNumber(), n)
     return done, missed
+
+def tie_to_neighbour(board, p, L, reach=2.2):
+    """Fallback: a straight track to the nearest same-net via or pad on the same
+    layer. The DRV8300 exposed pad (under the phase pad on top, so no via) is
+    tied to its GND pin 6 from the pad corner."""
+    n, c = p.GetNetname(), p.GetPosition()
+    fp = p.GetParentFootprint()
+    if fp.GetReference() in ("U102", "U202") and p.GetNumber() == "25":
+        p6 = next(q for q in fp.Pads() if q.GetNumber() == "6")
+        d6 = p6.GetPosition() - c
+        sx, sy = (1 if d6.x > 0 else -1), (1 if d6.y > 0 else -1)
+        corner = c + pcbnew.VECTOR2I(sx * mm(1.15), sy * mm(1.15))
+        if abs(d6.x) > abs(d6.y):
+            corner = pcbnew.VECTOR2I(corner.x, p6.GetPosition().y)
+        else:
+            corner = pcbnew.VECTOR2I(p6.GetPosition().x, corner.y)
+        t = pcbnew.PCB_TRACK(board); t.SetStart(corner); t.SetEnd(p6.GetPosition()); t.SetWidth(mm(0.2))
+        t.SetLayer(L); t.SetNet(p.GetNet()); board.Add(t)
+        return True
+    cands = [v.GetPosition() for v in board.GetTracks() if isinstance(v, pcbnew.PCB_VIA) and v.GetNetname() == n]
+    cands += [q.GetPosition() for q in board.GetPads() if q.GetNetname() == n and q.IsOnLayer(L) and q is not p]
+    cands.sort(key=lambda v: (v - c).EuclideanNorm())
+    for v in cands:
+        if (v - c).EuclideanNorm() > mm(reach): break
+        if seg_clear(board, c, v, 0.2, 0.16, n, L):
+            t = pcbnew.PCB_TRACK(board); t.SetStart(c); t.SetEnd(v); t.SetWidth(mm(0.2))
+            t.SetLayer(L); t.SetNet(p.GetNet()); board.Add(t)
+            return True
+    return False
+
+def punch_keepouts(board, h=0.45):
+    """Cut a square hole round every via that sits in a router keep-out."""
+    vias = [v.GetPosition() for v in board.GetTracks() if isinstance(v, pcbnew.PCB_VIA)]
+    for z in [z for z in board.Zones() if z.GetIsRuleArea() and z.GetZoneName() == "router keep-out"]:
+        ps = z.Outline().CloneDropTriangulation() if hasattr(z.Outline(), "CloneDropTriangulation") else z.Outline()
+        ps = pcbnew.SHAPE_POLY_SET(ps)
+        for c in vias:
+            sq = pcbnew.SHAPE_POLY_SET(); sq.NewOutline()
+            for dx, dy in ((-1, -1), (1, -1), (1, 1), (-1, 1)): sq.Append(c.x + dx * mm(h), c.y + dy * mm(h))
+            ps.BooleanSubtract(sq)
+        ps.Fracture()
+        o = z.Outline(); o.RemoveAllContours()
+        for i in range(ps.OutlineCount()):
+            ch = ps.COutline(i); o.NewOutline()
+            for j in range(ch.PointCount()): o.Append(ch.CPoint(j).x, ch.CPoint(j).y)
 
 def stitch(board, pitch=1.2, d=0.45, drill=0.2, clr=0.2):
     """GND vias on a grid wherever the via lands in GND fill on top or bottom
@@ -172,6 +229,7 @@ def main():
     board = pcbnew.LoadBoard(PCB)
     fill(board)
     print("fanout (vias, missed):", fanout(board))
+    punch_keepouts(board)
     route(board, passes)
     for z in list(board.Zones()):
         if z.GetIsRuleArea() and z.GetZoneName() == "router keep-out":
