@@ -213,16 +213,14 @@ def motor(m, OX, OY):
     place(f"R{b+2}", "R_H", R + 4, OY + 14)            # 100R: pins R+2 / R+6
     wire((R, OY + 14), (R + 2, OY + 14)); wire((R + 6, OY + 14), (R + 8, OY + 14))
     place(f"P{b+4}", "PAD", R + 9, OY + 14)
-    text(f"SIG{m} in (servo/DShot)", R + 11, OY + 13, 1.27)
     for row, pad, what in ((15, f"P{b+5}", f"TLM{m} (telemetry out)"), (17, f"P{b+6}", f"SWDIO{m}"), (18, f"P{b+7}", f"SWCLK{m}")):
         wire((R, OY + row), (R + 8, OY + row)); place(pad, "PAD", R + 9, OY + row)
-        text(what, R + 11, OY + row - 1, 1.27)
-    text("NRST / SWD pads: flash AM32 bootloader once", L - 26, OY + 2, 1.27)
+    text("NRST / SWD pads: flash AM32 bootloader once", L - 30, OY + 9, 1.27)
     # driver supply: GVDD from VBAT with 10 uF + 100 nF; MODE, DT, NC open; GND
     yg = OY + 8
-    wire((Dxl, yg), (Dxl - 9, yg))
-    cap_to_gnd(f"C{b+5}", Dxl - 3, yg); cap_to_gnd(f"C{b+6}", Dxl - 6, yg)
-    pwr("VBAT", Dxl - 9, yg)
+    wire((Dxl, yg), (Dxl - 11, yg))
+    cap_to_gnd(f"C{b+5}", Dxl - 3, yg); cap_to_gnd(f"C{b+6}", Dxl - 8, yg)
+    pwr("VBAT", Dxl - 11, yg)
     for num in ("5", "21", "7", "8"): nc(f"U{b+2}", num)
     text("MODE open: GLx = INLx; DT open: 200 ns", Dxl - 12, OY + 21, 1.27)
     wire((Dxl, OY + 15), (Dxl - 2, OY + 15), (Dxl - 2, OY + 16)); wire((Dxl, OY + 16), (Dxl - 2, OY + 16))
@@ -239,7 +237,6 @@ def motor(m, OX, OY):
         wire((Qx + 4, Y), (Qx + 7, Y), (Qx + 16, Y))
         label(N(p), Qx + 11, Y)
         place(f"P{b+k+1}", "PAD", Qx + 17, Y)
-        text(f"M{m} {p}", Qx + 19, Y - 1, 1.27)
         # gates (no series resistor: space; DRV8300 drive strength sets the edges)
         wire((Dxr, Y - 2), (Qx - 3, Y - 2))
         wire((Dxr, Y + 2), (Qx - 3, Y + 2))
@@ -248,19 +245,19 @@ def motor(m, OX, OY):
         wire((Qx + 1, Y - 5), (Qx + 1, Y - 6), (Qx + 3, Y - 6)); pwr("VBAT", Qx + 3, Y - 6)
         wire((Qx + 1, Y + 5), (Qx + 1, Y + 7), (LS, Y + 7))
         # bus cap at the half-bridge
-        cap_to_gnd(f"C{b+10+k}", Qx + 21, Y - 4, "VBAT")
+        cap_to_gnd(f"C{b+10+k}", Qx + 27, Y - 4, "VBAT")
     yA, yC = OY + 6 + 7, OY + 2 * PH + 6 + 7
     # current sense: LS rail -> 0.5 mOhm shunt -> GND, INA186A1 (25 V/V) -> RC -> PA6
     ys = yC + 4
     wire((LS, yA), (LS, ys))
     place(f"R{b+50}", "R_V", LS, ys + 2); pwr("GND", LS, ys + 4)
-    text("Shunt 0.5 mOhm x 25 V/V = 12.5 mV/A (AM32 MILLIVOLT_PER_AMP 12)", LS + 2, ys + 6, 1.27)
+    text("Shunt 0.5 mOhm x 25 V/V = 12.5 mV/A (AM32 MILLIVOLT_PER_AMP 12)", LS - 4, ys + 12, 1.27)
     IX = LS + 14
     place(f"U{b+3}", "INA186A1", IX, ys)
     wire((LS, ys), (IX - 6, ys))                       # IN+ (Kelvin to the shunt top)
-    wire((IX - 6, ys + 2), (IX - 8, ys + 2), (IX - 8, ys + 3)); pwr("GND", IX - 8, ys + 3)   # IN- (shunt GND end)
-    wire((IX - 6, ys + 4), (IX - 10, ys + 4)); pwr("+3V3", IX - 10, ys + 4)
-    cap_to_gnd(f"C{b+13}", IX - 12, ys + 4, "+3V3")
+    wire((IX - 6, ys + 2), (IX - 11, ys + 2), (IX - 11, ys + 3)); pwr("GND", IX - 11, ys + 3)   # IN- (shunt GND end)
+    wire((IX - 6, ys + 4), (IX - 9, ys + 4)); pwr("+3V3", IX - 9, ys + 4)
+    cap_to_gnd(f"C{b+13}", IX - 9, ys + 4)
     wire((IX - 6, ys + 6), (IX - 7, ys + 6), (IX - 7, ys + 7)); wire((IX - 6, ys + 7), (IX - 7, ys + 7))
     wire((IX - 7, ys + 7), (IX - 7, ys + 8)); pwr("GND", IX - 7, ys + 8)
     place(f"R{b+6}", "R_H", IX + 8, ys)                # pins IX+6 / IX+10
@@ -299,11 +296,11 @@ def supply(X, Y):
         cap_to_gnd(f"C{i+1}", X + 18 + 5 * i, Y + 1, "VBAT", "CP_V")
     text("C1-C4 220 uF: mounted on the battery leads, within 20 mm of P1/P2 (not on the PCB)", X + 14, Y - 2, 1.27)
     # Vbat divider -> VSENSE (both MCUs PA3)
-    pwr("VBAT", X + 44, Y)
-    place("R1", "R_V", X + 44, Y + 2)
-    wire((X + 44, Y + 4), (X + 48, Y + 4)); label("VSENSE", X + 48, Y + 4)
-    place("R2", "R_V", X + 44, Y + 6); pwr("GND", X + 44, Y + 8)
-    text("100k / 10k (AM32 TARGET_VOLTAGE_DIVIDER 110)", X + 40, Y - 2, 1.27)
+    pwr("VBAT", X + 84, Y + 2)
+    place("R1", "R_V", X + 84, Y + 4)
+    wire((X + 84, Y + 6), (X + 88, Y + 6)); label("VSENSE", X + 88, Y + 6)
+    place("R2", "R_V", X + 84, Y + 8); pwr("GND", X + 84, Y + 10)
+    text("Vbat sense 100k / 10k (AM32 TARGET_VOLTAGE_DIVIDER 110)", X + 76, Y - 1, 1.27)
     # buck: TPS62933 1.2 MHz -> +5V
     BX, BY = X + 20, Y + 22
     place("U1", "TPS62933", BX, BY)                    # left pins end BX-6, right BX+6
@@ -317,13 +314,13 @@ def supply(X, Y):
     wire((BX + 6, BY + 2), (BX + 9, BY + 2), (BX + 12, BY + 2))
     place("L1", "L_H", BX + 14, BY + 2)                # pins BX+12 / BX+16
     wire((BX + 16, BY + 2), (BX + 30, BY + 2)); pwr("+5V", BX + 30, BY + 2)
-    cap_to_gnd("C9", BX + 22, BY + 2); cap_to_gnd("C10", BX + 25, BY + 2)
+    cap_to_gnd("C9", BX + 24, BY + 2); cap_to_gnd("C10", BX + 27, BY + 2)
     place("R3", "R_V", BX + 19, BY + 4)                # top pin BX+19,BY+2 on +5V; bottom BY+6
     wire((BX + 6, BY + 4), (BX + 17, BY + 4), (BX + 17, BY + 6), (BX + 19, BY + 6))
     place("R4", "R_V", BX + 19, BY + 8); pwr("GND", BX + 19, BY + 10)
     wire((BX + 6, BY + 6), (BX + 7, BY + 6), (BX + 7, BY + 9)); place("C8", "C_V", BX + 7, BY + 10); pwr("GND", BX + 7, BY + 11)
     pwr("+5V", BX + 33, BY + 1); wire((BX + 33, BY + 1), (BX + 33, BY + 2)); flag(BX + 33, BY + 2)
-    text("5 V BEC to receiver pad", BX + 26, BY - 2, 1.27)
+    text("5 V BEC", BX + 22, BY - 4, 1.27)
     # pads for the receiver
     place("P4", "PAD", BX + 37, BY + 6); wire((BX + 36, BY + 6), (BX + 34, BY + 6)); pwr("+5V", BX + 34, BY + 6)
     place("P3", "PAD", BX + 37, BY + 9); wire((BX + 36, BY + 9), (BX + 34, BY + 9), (BX + 34, BY + 10)); pwr("GND", BX + 34, BY + 10)

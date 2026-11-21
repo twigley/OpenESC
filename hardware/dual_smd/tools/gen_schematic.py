@@ -157,6 +157,29 @@ add("U2", "TLV75533PDBV", "TLV75533PDBVR", "ldo", {"1": "+5V", "2": "GND", "3": 
 add("C11", "C", "1uF", "c0402", {"1": "+5V", "2": "GND"})
 add("C12", "C", "1uF", "c0402", {"1": "+3V3", "2": "GND"})
 
+NOTES = {
+ "AT32F421K8U7-4": "AM32 target RR_ROBOT_DUAL_ESC_F421; 4x4 mm QFN32 (K8U7 = 5x5 mm, same pinout) chosen to fit 28 x 20 mm",
+ "DRV8300DRGER": "D = internal bootstrap diodes; MODE and DT open (non-inverted INLx, 200 ns dead time); GVDD 5-20 V",
+ "AON7934": "30 V dual asymmetric half-bridge, DFN 3x3A; RDS(on) at 4.5 V: 15.8 mOhm (Q1) / 11.6 mOhm (Q2) max",
+ "INA186A1IDCKR": "25 V/V; 0.5 mOhm shunt gives 12.5 mV/A (AM32 MILLIVOLT_PER_AMP 12)",
+ "TPS62933DRLR": "3.8-30 V in, 3 A; 1.2 MHz (RT to GND); 5 V BEC for the receiver",
+ "TLV75533PDBVR": "3.3 V for both MCUs, from +5V",
+}
+def write_bom(path):
+    import csv, collections
+    groups = collections.OrderedDict()
+    for ref, sym, val, fp, pins, mpn in PARTS:
+        key = (val, fp, mpn, ref in OFF_BOARD)
+        groups.setdefault(key, []).append(ref)
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["Refs", "Qty", "Value", "Part number", "Footprint", "Notes"])
+        for (val, fp, mpn, off), refs in groups.items():
+            note = NOTES.get(mpn, "")
+            if off: note = "OFF-BOARD: solder across the battery leads within 20 mm of BAT+/BAT-. " + note
+            w.writerow([" ".join(refs), len(refs), val, mpn or "generic", fp.split(":")[1], note.strip()])
+
 if __name__ == "__main__":
+    write_bom(os.path.join(HERE, "..", "BOM.csv"))
     import runpy
     runpy.run_path(os.path.join(HERE, "draw_schematic.py"), run_name="__main__")

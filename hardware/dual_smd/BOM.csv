@@ -1,23 +1,46 @@
-Ref,Qty,Value,Part number (example),Footprint,Notes
-U1 U2,2,3-phase half-bridge gate driver,TI DRV8300DPWR,TSSOP-20 (PW),"D variant = integrated bootstrap diodes, non-inverted INLx, fixed ~200 ns dead time; GVDD 5-20 V"
-Q1-Q12,12,"N-MOSFET 30 V, logic level",Infineon BSZ019N03LSATMA1 (LCSC/JLCPCB C152374),TSDSON-8 FL / PQFN 3.3x3.3 mm,"1.9 mOhm class; check RDS(on) at VGS=4.5 V in the datasheet. Fallback for hotter installs: BSC014N04LS 5x6 mm"
-C1-C6,6,220 nF 25 V X7R,generic,0603,Bootstrap BSTx-SHx; DRV8300D max 1 uF
-C7 C8,2,10 uF 25 V X7R,generic,0805,GVDD bypass (datasheet: >=10 uF)
-C9 C10,2,100 nF 25 V X7R,generic,0402/0603,GVDD HF bypass at pin 7
-C11-C16,6,10 uF 25 V X7R,generic,1206,"Bus decoupling, one at each half-bridge (VBAT to GND)"
-C17-C20,4,220 uF 16 V low-ESR,"electrolytic or polymer, 6.3 mm can",CP_Elec_6.3x7.7 SMD,"Bulk, two per bridge; shrunk from 330 uF 8 mm to fit 30 x 25 mm"
-R1-R12,12,10 R,generic,0402,Gate series resistors (datasheet curves use 15 R; tune on scope)
-R13-R24,12,10 k,generic,0402,Gate-source pull-down on every MOSFET
-J3 J4,2,3-pin header (5V / wiper / GND),JST-SH or 2.54 mm,SMD/THT,Speed pots motor 1 (PC1/A1) and motor 2 (PC2/A2); pads to save space
-P1,1,Battery input pads,XT30/XT60 lead,2x solder pad,14 AWG; 40 A total for both motors
-P2-P7,6,Motor phase pads,-,solder pad,"M1 A/B/C, M2 A/B/C; 16 AWG"
-U3,1,ATmega328P,Microchip ATmega328P-MU,QFN-32 5x5 mm,"Same chip as the Nano, so the firmware is unchanged"
-Y1,1,16 MHz ceramic resonator with built-in caps,e.g. Murata CSTNE16M0V53Z000R0 (verify),3.2x1.3 mm SMD,PB6/PB7
-U4,1,5 V LDO,e.g. Microchip MCP1703AT-5002E/CB (verify),SOT-23,VBAT to +5V; 16 V max input
-C21-C22,2,1 uF 25 V X7R,generic,0603,LDO in/out
-C23-C26,4,100 nF X7R,generic,0402,"MCU VCC x2, AVCC, AREF"
-C27,1,10 uF 10 V X7R,generic,0603,+5V bulk
-C28,1,100 nF X7R,generic,0402,DTR to RESET auto-reset
-R25,1,10 k,generic,0402,RESET pull-up
-J1,1,6 bare pads 1.27 mm pitch (GND CTS 5V RX TX DTR),-,PinHeader_1x06_P1.27mm footprint / pads,"Solder a header or wires only when programming; was a 2.54 mm header (15 mm long)"
-J2,1,ISP pads 2x3,Tag-Connect TC2030 footprint or 2.54 mm,pads,Bootloader burn once; battery disconnected
+Refs,Qty,Value,Part number,Footprint,Notes
+U101 U201,2,AT32F421K8U7-4,AT32F421K8U7-4,QFN-32-1EP_4x4mm_P0.4mm_EP2.65x2.65mm,"AM32 target RR_ROBOT_DUAL_ESC_F421; 4x4 mm QFN32 (K8U7 = 5x5 mm, same pinout) chosen to fit 28 x 20 mm"
+U102 U202,2,DRV8300DRGER,DRV8300DRGER,VQFN-24-1EP_4x4mm_P0.5mm_EP2.45x2.45mm,"D = internal bootstrap diodes; MODE and DT open (non-inverted INLx, 200 ns dead time); GVDD 5-20 V"
+C101 C102 C104 C106 C113 C201 C202 C204 C206 C213 C7,11,100nF,generic,C_0402_1005Metric,
+C103 C203 C11 C12,4,1uF,generic,C_0402_1005Metric,
+R101 R103 R104 R105 R107 R109 R111 R113 R114 R115 R201 R203 R204 R205 R207 R209 R211 R213 R214 R215 R2 R4,22,10k,generic,R_0402_1005Metric,
+R102 R202,2,100R,generic,R_0402_1005Metric,
+C105 C205,2,10uF 16V,generic,C_0603_1608Metric,
+C107 C108 C109 C207 C208 C209 C6,7,100nF 25V,generic,C_0402_1005Metric,
+Q101 Q102 Q103 Q201 Q202 Q203,6,AON7934,AON7934,AOS_DFN3x3A-8L-EP2_3x3mm_P0.65mm,"30 V dual asymmetric half-bridge, DFN 3x3A; RDS(on) at 4.5 V: 15.8 mOhm (Q1) / 11.6 mOhm (Q2) max"
+C110 C111 C112 C210 C211 C212 C5,7,10uF 25V,generic,C_0805_2012Metric,
+R150 R250,2,0R0005,e.g. WSLP1206R0005 (verify),R_1206_3216Metric,
+U103 U203,2,INA186A1,INA186A1IDCKR,SOT-363_SC-70-6,25 V/V; 0.5 mOhm shunt gives 12.5 mV/A (AM32 MILLIVOLT_PER_AMP 12)
+R106 R206,2,1k,generic,R_0402_1005Metric,
+C114 C214 C8,3,10nF,generic,C_0402_1005Metric,
+R108 R110 R112 R208 R210 R212,6,4.7k,generic,R_0402_1005Metric,
+R116 R216,2,1.5k,generic,R_0402_1005Metric,
+P101,1,M1 A,generic,Pad_SMD_2.5x3.0mm,
+P102,1,M1 B,generic,Pad_SMD_2.5x3.0mm,
+P103,1,M1 C,generic,Pad_SMD_2.5x3.0mm,
+P104,1,SIG1,generic,Pad_SMD_1.5x1.5mm_Tight,
+P105,1,TLM1,generic,Pad_SMD_1.0x1.0mm_Tight,
+P106,1,SWDIO1,generic,Pad_SMD_1.0x1.0mm_Tight,
+P107,1,SWCLK1,generic,Pad_SMD_1.0x1.0mm_Tight,
+P108,1,NRST1,generic,Pad_SMD_1.0x1.0mm_Tight,
+P201,1,M2 A,generic,Pad_SMD_2.5x3.0mm,
+P202,1,M2 B,generic,Pad_SMD_2.5x3.0mm,
+P203,1,M2 C,generic,Pad_SMD_2.5x3.0mm,
+P204,1,SIG2,generic,Pad_SMD_1.5x1.5mm_Tight,
+P205,1,TLM2,generic,Pad_SMD_1.0x1.0mm_Tight,
+P206,1,SWDIO2,generic,Pad_SMD_1.0x1.0mm_Tight,
+P207,1,SWCLK2,generic,Pad_SMD_1.0x1.0mm_Tight,
+P208,1,NRST2,generic,Pad_SMD_1.0x1.0mm_Tight,
+P1,1,BAT+,generic,Pad_SMD_2.5x5.0mm,
+P2,1,BAT-,generic,Pad_SMD_2.5x5.0mm,
+P3,1,GND,generic,Pad_SMD_1.5x1.5mm_Tight,
+P4,1,5V,generic,Pad_SMD_1.5x1.5mm_Tight,
+P5,1,3V3,generic,Pad_SMD_1.0x1.0mm_Tight,
+P6,1,GND,generic,Pad_SMD_1.0x1.0mm_Tight,
+C1 C2 C3 C4,4,220uF 16V,"low-ESR polymer/electrolytic, on battery leads",CP_Elec_6.3x7.7,OFF-BOARD: solder across the battery leads within 20 mm of BAT+/BAT-.
+R1,1,100k,generic,R_0402_1005Metric,
+U1,1,TPS62933DRLR,TPS62933DRLR,SOT-583-8,"3.8-30 V in, 3 A; 1.2 MHz (RT to GND); 5 V BEC for the receiver"
+L1,1,2.2uH,"Changjiang FNR3015S2R2MT, 3x3 mm (verify Isat >= 2.5 A)",L_Changjiang_FNR3015S,
+R3,1,31.6k,generic,R_0402_1005Metric,
+C9 C10,2,22uF 10V,generic,C_0603_1608Metric,
+U2,1,TLV75533PDBVR,TLV75533PDBVR,SOT-23-5,"3.3 V for both MCUs, from +5V"
