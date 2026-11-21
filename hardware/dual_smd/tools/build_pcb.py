@@ -1,112 +1,118 @@
 #!/usr/bin/env python3
-"""Build kicad/dual_esc.kicad_pcb from the schematic (KiCad's "Update PCB from
-Schematic", scripted) and place the parts.
+"""Build kicad/dual_esc.kicad_pcb from the netlist and place the parts.
 
-Run with KiCad's bundled Python, e.g. on Windows:
-    "C:/Program Files/KiCad/10.0/bin/python.exe" tools/build_pcb.py
+Run with KiCad's bundled Python:
+    "C:/Program Files/KiCad/10.0/bin/python.exe" tools/build_pcb.py [--route]
 
-Steps: export the netlist with kicad-cli, load every footprint, link it to its
-schematic symbol (so the GUI's Update PCB keeps working), assign nets, draw a
-30 x 25 mm outline, set a 2-layer 2 oz stackup, and place parts from PLACE.
-Parts that do not fit on the board are parked to the right of it (OFFBOARD)
-so the shortfall is visible.
+Connectivity comes from gen_schematic.PARTS (check_schematic.py proves the
+drawn schematic matches it). Footprints are linked to their schematic symbols
+through the same deterministic UUIDs draw_schematic.py writes, so KiCad's
+"Update PCB from Schematic" recognises every part.
+
+Power copper (VBAT, GND, phase nodes, low-side source nodes) is drawn here as
+zones; everything else is routed with Freerouting (--route).
 """
-import os, re, subprocess, sys
+import json, os, re, subprocess, sys, uuid
 import pcbnew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import gen_schematic as spec
+
 KD = os.path.normpath(os.path.join(HERE, "..", "kicad"))
-SCH = os.path.join(KD, "dual_esc.kicad_sch")
 PCB = os.path.join(KD, "dual_esc.kicad_pcb")
+PRO = os.path.join(KD, "dual_esc.kicad_pro")
 BIN = os.path.dirname(sys.executable)
-CLI = os.path.join(BIN, "kicad-cli.exe" if os.name == "nt" else "kicad-cli")
-FPDIR = os.environ.get("KICAD10_FOOTPRINT_DIR") or os.path.normpath(os.path.join(BIN, "..", "share", "kicad", "footprints"))
+FPDIR = os.path.normpath(os.path.join(BIN, "..", "share", "kicad", "footprints"))
 LIBS = {"OpenESC_dual": os.path.join(KD, "OpenESC_dual.pretty")}
+FREEROUTING = os.path.expandvars(r"%LOCALAPPDATA%\freerouting\freerouting.exe")
 
-W, H = 30.0, 25.0          # board, mm
-OX, OY = 100.0, 100.0      # board top-left in KiCad coordinates
+W, H = 28.0, 20.0
+LAYERS = int(os.environ.get("ESC_LAYERS", "2"))   # 4 = feasibility trial with inner GND plane
+OX, OY = 100.0, 100.0
 mm = pcbnew.FromMM
+def P(x, y): return pcbnew.VECTOR2I(mm(OX + x), mm(OY + y))
 
-# ------------------------------------------------------------------ netlist
-def sexpr(s):
-    tok = re.findall(r'\(|\)|"(?:[^"\\]|\\.)*"|[^\s()]+', s)
-    st = [[]]
-    for t in tok:
-        if t == "(": st.append([])
-        elif t == ")": x = st.pop(); st[-1].append(x)
-        else: st[-1].append(t[1:-1].replace('\\"', '"') if t.startswith('"') else t)
-    return st[0][0]
-def kids(n, k): return [c for c in n if isinstance(c, list) and c and c[0] == k]
-def val(n, k):
-    c = kids(n, k)
-    return c[0][1] if c and len(c[0]) > 1 else ""
+# schematic symbol UUIDs (same scheme as draw_schematic.py)
+SCH_NS = uuid.UUID("2b0b8f51-3f0e-4a77-9a55-5b1f2f7e9c01")
+def sym_uuid(ref): return str(uuid.uuid5(SCH_NS, "/".join(("s", ref))))
 
-def read_netlist():
-    out = os.path.join(KD, "dual_esc.net.tmp")
-    subprocess.run([CLI, "sch", "export", "netlist", "-o", out, SCH], check=True)
-    root = sexpr(open(out, encoding="utf8").read()); os.remove(out)
-    comps = {}
-    for c in kids(kids(root, "components")[0], "comp"):
-        tst = kids(c, "tstamps")[0][1]
-        comps[val(c, "ref")] = dict(value=val(c, "value"), fp=val(c, "footprint"), uuid=tst)
-    nets = {}
-    for n in kids(kids(root, "nets")[0], "net"):
-        name = val(n, "name")
-        for node in kids(n, "node"):
-            nets[(val(node, "ref"), val(node, "pin"))] = name
-    return comps, nets
-
-# ---------------------------------------------------------------- placement
-# (x, y) are mm from the board's top-left corner, seen from the top.
-# side "F" = top, "B" = bottom. rot in degrees (KiCad, CCW).
+# ------------------------------------------------------------------ placement
+# (x, y) mm from the board's top-left corner seen from the top; rot CCW deg.
 PLACE = {}
 def at(ref, x, y, rot=0, side="F"): PLACE[ref] = (x, y, rot, side)
 
-# Top: battery pads on the left short edge.
-at("P1", 2.3, 12.5)
-# Top: three half-bridge columns per motor. M1 in the top half (phase pads on
-# the top edge), M2 mirrored in the bottom half. In each column the high side is
-# on the left with its sources (phase) toward the edge and drain (VBAT) toward
-# the middle; the low side is on the right with its drain (phase) toward the edge
-# and sources (GND) toward the middle; the 10 uF 1206 sits just inboard.
-COLS = [9.1, 17.45, 25.8]
-for m in (1, 2):
-    edge_y, fet_y, cap_y = (2.3, 7.05, 10.35) if m == 1 else (H - 2.3, H - 7.05, H - 10.35)
-    hs_rot, ls_rot = (270, 90) if m == 1 else (90, 270)
-    for k, cx in enumerate(COLS):
-        q = 6 * (m - 1) + 2 * k
-        at(f"P{1 + 3*(m-1) + k + 1}", cx, edge_y)
-        at(f"Q{q + 1}", cx - 1.97, fet_y, hs_rot)
-        at(f"Q{q + 2}", cx + 1.97, fet_y, ls_rot)
-        at(f"C{10 + 3*(m-1) + k + 1}", cx, cap_y, 0)
+FX = [7.6, 12.8, 18.0]           # half-bridge column centres (both motors)
+Y1, Y2 = 5.4, 14.6               # FET row centres, motor 1 (top) and motor 2
+at("P1", 1.6, 3.1)               # BAT+
+at("P2", 2.85, 10.0, 90)         # BAT-, lying along x
+at("R150", 3.35, 7.3, 180)        # shunt M1: pin 2 (GND) left over BAT-, pin 1 (LS) right into the LS bus
+at("R250", 3.35, 12.7, 180)
+for k, x in enumerate(FX):
+    at(f"Q{101+k}", x, Y1, 90)               # gates at the bottom corners
+    at(f"Q{201+k}", x, Y2, 270)              # gates at the top corners
+    at(f"P{101+k}", x, 1.85)
+    at(f"P{201+k}", x, H - 1.85)
 
-# Bottom: one DRV8300 under each motor's bridges, gate and pull-down resistors
-# between it and the bridges, bootstrap caps beside it, GVDD caps at pin 7.
-for m in (1, 2):
-    top = m == 1
-    uy = 6.6 if top else H - 6.6
-    at(f"U{m}", 14.0, uy, 90 if top else 270, "B")
-    ry1, ry2 = (0.85, 1.95) if top else (H - 0.85, H - 1.95)
-    for i in range(6):
-        at(f"R{6*(m-1) + i + 1}", 8.6 + 2.15 * i, ry1, 0, "B")
-        at(f"R{12 + 6*(m-1) + i + 1}", 8.6 + 2.15 * i, ry2, 0, "B")
+def per_motor(m):
+    """Place motor m's parts. Motor 2 mirrors motor 1 about y = H/2."""
+    b = 100 * m
+    Y = (lambda y: y) if m == 1 else (lambda y: H - y)
+    R = (lambda r: r) if m == 1 else (lambda r: (360 - r) % 360)
+    a = lambda ref, x, y, rot=0, side="F": at(ref, x, Y(y), R(rot), side)
+    # top: gate driver at the right, bootstrap caps beside its BST/SH pins
+    # rotated 180 so the gate/SH/BST pins face the FETs (left) and the logic inputs face right
+    a(f"U{b+2}", 23.75, 3.7, 180)
     for k in range(3):
-        at(f"C{3*(m-1) + k + 1}", 19.3, uy + (-2.0 + 2.0 * k) * (1 if top else -1), 0, "B")
-    at(f"C{6 + m}", 9.2, uy + (1.0 if top else -1.0), 90, "B")
-    at(f"C{8 + m}", 9.2, uy + (-2.0 if top else 2.0), 90, "B")
-# Bottom: MCU block on the left, under the battery pads.
-at("U3", 4.6, 12.5, 0, "B")
-at("Y1", 4.6, 17.2, 0, "B")
-at("C23", 1.0, 10.6, 90, "B"); at("C24", 1.0, 12.5, 90, "B"); at("C25", 8.4, 12.5, 90, "B")
-at("C26", 8.4, 14.4, 90, "B"); at("R25", 8.4, 10.6, 90, "B"); at("C28", 1.0, 14.4, 90, "B")
-at("U4", 3.0, 5.0, 0, "B"); at("C21", 3.0, 2.0, 0, "B"); at("C22", 3.0, 8.0, 0, "B")
-at("C27", 3.0, 20.6, 0, "B")
-# Bottom: speed connectors on the right short edge, cable exit to the right.
-at("J3", 26.4, 6.0, 90, "B"); at("J4", 26.4, 19.0, 90, "B")
+        a(f"C{b+7+k}", 20.45, 1.15 + 1.95 * k, 90)  # bootstrap caps by the BST/SH pins
+    a(f"C{b+5}", 27.15, 2.2, 90)                 # GVDD 10 uF 0603, at pin 4 (now on the right)
+    a(f"C{b+6}", 27.15, 4.65, 90)                # GVDD 100 nF
+    # bottom: low-side gate pull-downs (to GND) beside each GL escape via
+    for k, x in enumerate(FX):
+        a(f"R{b+3+k}", x - 2.6, 7.3, 180, "B")
+    # bottom: bus caps from the VBAT pour (under FETs) to the GND strip
+    for k, x in enumerate(FX):
+        a(f"C{b+10+k}", x - 0.3, 3.45, 90, "B")
+    # bottom: BEMF dividers + neutral network in the GND strip under the phase pads
+    bemf = [f"R{b+i}" for i in (7, 8, 9, 10, 11, 12, 13, 14, 15, 16)]
+    slots = [(3.6 + 2.0 * i, 0.85) for i in range(8)] + [(4.2, 2.15), (10.0, 2.15)]
+    for ref, (x, y) in zip(bemf, slots):
+        a(ref, x, y, 0, "B")
+    # bottom: MCU and its support at the right
+    a(f"U{b+1}", 24.3, 4.2, 180, "B")
+    for i, ref in enumerate((f"C{b+1}", f"C{b+3}", f"C{b+4}", f"R{b+1}", f"R{b+2}")):
+        a(ref, 20.5, 1.0 + 1.15 * i, 0, "B")
+    a(f"C{b+2}", 24.6, 7.4, 0, "B")              # VDD pin 17
+    a(f"R{b+6}", 20.6, 6.75, 0, "B")             # INA output filter R
+    a(f"C{b+14}", 22.6, 7.4, 0, "B")             # filter C at PA6
+    # bottom: current-sense amp under BAT-, next to its shunt
+    a(f"U{b+3}", 1.7, 8.0, 0, "B")
+    a(f"C{b+13}", 1.7, 6.3, 0, "B")
+    # bottom: SWD pads, one row along the middle of the board
+    for i in range(3):
+        at(f"P{b+6+i}", (7.3 if m == 1 else 12.5) + 1.45 * i, 10.0, 0, "B")
 
-OFFBOARD_X = W + 8.0       # parts without a place on the board are parked here
+for m in (1, 2):
+    per_motor(m)
+# receiver / telemetry pads, top-left corner (2 x 3 grid)
+for ref, x, y in (("P104", 1.25, 14.75), ("P204", 3.25, 14.75), ("P3", 1.25, 16.6),
+                  ("P4", 3.25, 16.6), ("P105", 1.25, 18.45), ("P205", 3.25, 18.45)):
+    at(ref, x, y)
+# BEC: top right, between the two drivers
+at("U1", 22.2, 10.0, 0); at("L1", 25.6, 9.9, 0)
+at("C9", 25.6, 7.275, 0); at("C10", 25.6, 12.525, 0)
+at("C6", 21.4, 7.6, 0); at("C7", 23.2, 7.6, 90); at("C8", 21.4, 12.15, 0)
+at("R3", 23.2, 12.4, 90); at("R4", 21.4, 13.1, 0)
+# bottom right middle: 3.3 V LDO and its caps, buck input cap
+at("U2", 26.0, 10.0, 90, "B"); at("C11", 22.3, 8.45, 0, "B"); at("C12", 22.3, 11.55, 0, "B")
+at("C5", 22.3, 10.0, 0, "B")
+# bottom middle: Vbat divider and SWD supply pads beside the SWD row
+at("R1", 17.05, 9.5, 0, "B"); at("R2", 17.05, 10.5, 0, "B")
+at("P5", 6.1, 10.0, 0, "B"); at("P6", 18.8, 10.0, 0, "B")
 
-# ---------------------------------------------------------------------- build
+OFFBOARD_X = W + 6.0
+
+# ---------------------------------------------------------------- build
 def load_fp(fpid):
     lib, name = fpid.split(":")
     path = LIBS.get(lib) or os.path.join(FPDIR, lib + ".pretty")
@@ -116,80 +122,186 @@ def load_fp(fpid):
     return fp
 
 def main():
-    comps, pin_net = read_netlist()
     board = pcbnew.NewBoard(PCB)
-    board.SetCopperLayerCount(2)
-    ds = board.GetDesignSettings()
-    ds.m_CopperEdgeClearance = mm(0.3)
-    netinfo = {}
-    def net(name):
-        if name not in netinfo:
-            ni = pcbnew.NETINFO_ITEM(board, name); board.Add(ni); netinfo[name] = ni
-        return netinfo[name]
-
-    # outline
+    board.SetCopperLayerCount(LAYERS)
+    nets = {}
+    def net(n):
+        if n not in nets:
+            ni = pcbnew.NETINFO_ITEM(board, n); board.Add(ni); nets[n] = ni
+        return nets[n]
     pts = [(0, 0), (W, 0), (W, H), (0, H)]
     for a, b in zip(pts, pts[1:] + pts[:1]):
         s = pcbnew.PCB_SHAPE(board); s.SetShape(pcbnew.SHAPE_T_SEGMENT)
-        s.SetStart(pcbnew.VECTOR2I(mm(OX + a[0]), mm(OY + a[1]))); s.SetEnd(pcbnew.VECTOR2I(mm(OX + b[0]), mm(OY + b[1])))
-        s.SetLayer(pcbnew.Edge_Cuts); s.SetWidth(mm(0.1)); board.Add(s)
-
+        s.SetStart(P(*a)); s.SetEnd(P(*b)); s.SetLayer(pcbnew.Edge_Cuts); s.SetWidth(mm(0.1)); board.Add(s)
     park = []
-    for ref in sorted(comps, key=lambda r: (re.sub(r"\d", "", r), int(re.sub(r"\D", "", r) or 0))):
-        c = comps[ref]
-        fp = load_fp(c["fp"])
-        fp.SetReference(ref); fp.SetValue(c["value"])
-        fp.SetPath(pcbnew.KIID_PATH("/" + c["uuid"]))
+    for ref, sym, val, fpid, pins, mpn in spec.PARTS:
+        if ref in spec.OFF_BOARD: continue
+        fp = load_fp(fpid)
+        fp.SetReference(ref); fp.SetValue(val)
+        fp.SetPath(pcbnew.KIID_PATH("/" + sym_uuid(ref)))
         board.Add(fp)
         for pad in fp.Pads():
-            n = pin_net.get((ref, pad.GetNumber()))
-            if n and not n.startswith("unconnected-"):
-                pad.SetNet(net(n))
-        if ref in PLACE:
-            x, y, rot, side = PLACE[ref]
-        else:
-            park.append(ref); continue
-        fp.SetPosition(pcbnew.VECTOR2I(mm(OX + x), mm(OY + y)))
-        if side == "B":
-            fp.Flip(fp.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
+            n = pins.get(pad.GetNumber())
+            if n: pad.SetNet(net(n))
+        if ref not in PLACE: park.append(fp); print("parked", ref); continue
+        x, y, rot, side = PLACE[ref]
+        fp.SetPosition(P(x, y))
+        if side == "B": fp.Flip(fp.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
         fp.SetOrientationDegrees(rot)
-    # park the rest beside the board, in a column
-    y = 0.0
-    for ref in park:
-        fp = board.FindFootprintByReference(ref)
-        fp.SetPosition(pcbnew.VECTOR2I(mm(OX + OFFBOARD_X), mm(OY + y)))
-        bb = fp.GetBoundingBox(False)            # footprint origin need not be its centre
-        fp.Move(pcbnew.VECTOR2I(0, mm(OY + y) - bb.GetTop()))
-        y += pcbnew.ToMM(bb.GetHeight()) + 1.5
-    t = pcbnew.PCB_TEXT(board)
-    t.SetText("NOT ON BOARD (no room in 30 x 25 mm):\n" + " ".join(park) if park else "")
-    t.SetPosition(pcbnew.VECTOR2I(mm(OX + W + 2), mm(OY - 3))); t.SetLayer(pcbnew.Cmts_User)
-    t.SetHorizJustify(pcbnew.GR_TEXT_H_ALIGN_LEFT); board.Add(t)
+    y, xo = 0.0, OFFBOARD_X
+    for fp in park:
+        fp.SetPosition(P(xo, y)); bb = fp.GetBoundingBox(False)
+        fp.Move(pcbnew.VECTOR2I(0, mm(OY + y) - bb.GetTop())); y += pcbnew.ToMM(bb.GetHeight()) + 0.5
+        if y > 30: y, xo = 0.0, xo + 8
+    power_copper(board, net)
+    flush_zones(board, net)
+    flush_keepouts(board)
+    gnd_fill(board, net("GND"))
     board.BuildConnectivity()
     pcbnew.SaveBoard(PCB, board)
-    set_stackup_2oz(PCB)
-    print(f"footprints={len(comps)} nets={len(netinfo)} placed={len(comps) - len(park)} parked={park}")
+    write_rules()
+    print(f"placed {len(PLACE)}, parked {len(park)}, nets {len(nets)}")
 
-STACKUP = """		(stackup
-			(layer "F.SilkS" (type "Top Silk Screen"))
-			(layer "F.Paste" (type "Top Solder Paste"))
-			(layer "F.Mask" (type "Top Solder Mask") (thickness 0.01))
-			(layer "F.Cu" (type "copper") (thickness 0.07))
-			(layer "dielectric 1" (type "core") (thickness 1.45) (material "FR4") (epsilon_r 4.5) (loss_tangent 0.02))
-			(layer "B.Cu" (type "copper") (thickness 0.07))
-			(layer "B.Mask" (type "Bottom Solder Mask") (thickness 0.01))
-			(layer "B.Paste" (type "Bottom Solder Paste"))
-			(layer "B.SilkS" (type "Bottom Silk Screen"))
-			(copper_finish "None")
-			(dielectric_constraints no)
-		)
-"""
-def set_stackup_2oz(path):
-    """pcbnew's Python API can't edit the stackup, so write it into (setup)."""
-    s = open(path, encoding="utf8").read()
-    s = re.sub(r"\n\t\t\(stackup\n.*?\n\t\t\)\n", "\n", s, flags=re.S)
-    s = s.replace("\t(setup\n", "\t(setup\n" + STACKUP, 1)
-    open(path, "w", encoding="utf8").write(s)
+# ------------------------------------------------------------- power copper
+VIA_D, VIA_DRILL = 0.5, 0.25
+ZONES = {}   # (net name, layer, prio, thermal) -> [polygon]; merged per key in flush_zones()
+KEEPOUT = {}  # layer -> [rect]: router keep-outs just inside the power copper
+def add_zone(board, netinfo, layer, pts, prio=0, thermal=False, keepout=True):
+    ZONES.setdefault((netinfo.GetNetname(), layer, prio, thermal), []).append(pts)
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    if keepout and len(pts) == 4:
+        x1, x2, y1, y2 = min(xs) + 0.5, max(xs) - 0.5, min(ys) + 0.5, max(ys) - 0.5
+        if x2 - x1 > 0.4 and y2 - y1 > 0.4:
+            KEEPOUT.setdefault(layer, []).append(rect(x1, y1, x2, y2))
+def flush_keepouts(board):
+    """Rule areas (no tracks, no vias) over the power copper so Freerouting
+    leaves it alone; a 0.5 mm rim stays open so nets can still reach it."""
+    for layer, rects in KEEPOUT.items():
+        ps = pcbnew.SHAPE_POLY_SET()
+        for pts in rects:
+            one = pcbnew.SHAPE_POLY_SET(); one.NewOutline()
+            for x, y in pts: one.Append(mm(OX + x), mm(OY + y))
+            ps.BooleanAdd(one)
+        ps.Simplify()
+        for i in range(ps.OutlineCount()):
+            ch = ps.COutline(i)
+            z = pcbnew.ZONE(board); z.SetIsRuleArea(True); z.SetLayer(layer)
+            z.SetDoNotAllowTracks(True); z.SetDoNotAllowVias(True); z.SetDoNotAllowPads(False)
+            z.SetDoNotAllowZoneFills(False); z.SetDoNotAllowFootprints(False)
+            z.SetZoneName("router keep-out")
+            o = z.Outline(); o.NewOutline()
+            for j in range(ch.PointCount()): o.Append(ch.CPoint(j).x, ch.CPoint(j).y)
+            board.Add(z)
+    KEEPOUT.clear()
+def flush_zones(board, net):
+    for (name, layer, prio, thermal), polys in ZONES.items():
+        ps = pcbnew.SHAPE_POLY_SET()
+        for pts in polys:
+            one = pcbnew.SHAPE_POLY_SET(); one.NewOutline()
+            for x, y in pts: one.Append(mm(OX + x), mm(OY + y))
+            ps.BooleanAdd(one)
+        ps.Simplify()
+        for i in range(ps.OutlineCount()):
+            ch = ps.COutline(i)
+            make_zone(board, net(name), layer, [(ch.CPoint(j).x, ch.CPoint(j).y) for j in range(ch.PointCount())], prio, thermal)
+    ZONES.clear()
+def make_zone(board, netinfo, layer, pts_iu, prio, thermal, clearance=0.2, min_w=0.2):
+    z = pcbnew.ZONE(board)
+    z.SetLayer(layer); z.SetNet(netinfo); z.SetAssignedPriority(prio)
+    o = z.Outline(); o.NewOutline()
+    for x, y in pts_iu: o.Append(int(x), int(y))
+    z.SetLocalClearance(mm(clearance)); z.SetMinThickness(mm(min_w))
+    z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL if thermal else pcbnew.ZONE_CONNECTION_FULL)
+    z.SetThermalReliefGap(mm(0.25)); z.SetThermalReliefSpokeWidth(mm(0.4))
+    board.Add(z); return z
+def rect(x1, y1, x2, y2): return [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+def add_via(board, netinfo, x, y, d=VIA_D, drill=VIA_DRILL):
+    v = pcbnew.PCB_VIA(board); v.SetPosition(P(x, y)); v.SetWidth(mm(d)); v.SetDrill(mm(drill))
+    v.SetNet(netinfo); board.Add(v); return v
+
+def power_copper(board, net):
+    """Hand-drawn power copper. Top: phase nodes up/down to their pads,
+    low-side source (LS) gaps + bus to the shunt, small VBAT islands at each
+    FET drain with vias. Bottom: VBAT pour under the FET rows (fed from BAT+),
+    GND everywhere else. Then a low-priority GND fill on both layers."""
+    F, B = pcbnew.F_Cu, pcbnew.B_Cu
+    for m, Y, s in ((1, Y1, 1), (2, Y2, -1)):
+        yy = (lambda y: y) if m == 1 else (lambda y: H - y)   # mirror motor 2
+        for k, (x, p) in enumerate(zip(FX, "ABC")):
+            d = 1 if m == 1 else -1        # LS gap side: left for M1, right for M2
+            # phase node: wide copper from the phase pad down to the switch pad (pad 9)
+            nx1, nx2 = (x - 0.955, x + 0.089) if m == 1 else (x - 0.089, x + 0.955)
+            KEEPOUT.setdefault(F, []).append(rect(x - 1.85, yy(0.8), x + 1.85, yy(3.25)))
+            add_zone(board, net(f"M{m}_{p}"), F, [(x - 2.35, yy(0.3)), (x + 2.35, yy(0.3)), (x + 2.35, yy(3.75)),
+                     (nx2, yy(3.75)), (nx2, yy(5.4)), (nx1, yy(5.4)), (nx1, yy(3.75)), (x - 2.35, yy(3.75))], prio=5)
+            # LS gap beside the S2 pins, running into the LS bus; notched round the
+            # low-side gate pin (G2) and its escape via
+            o, i = (x - 2.6, x - 1.9) if m == 1 else (x + 2.6, x + 1.9)
+            pin = x - 1.15 if m == 1 else x + 1.15
+            add_zone(board, net(f"M{m}_LS"), F, [(o, yy(4.0)), (pin, yy(4.0)), (pin, yy(5.95)), (i, yy(5.95)),
+                                                  (i, yy(7.6)), (o, yy(7.6))], prio=4)
+            KEEPOUT.setdefault(F, []).append(rect(min(o, i) + 0.2, yy(4.5) if m == 1 else yy(7.1), max(o, i) - 0.2, yy(7.1) if m == 1 else yy(4.5)))
+            # gate escape vias just below the gate pins (G2 = low side, G1 = high side)
+            for gx, gnet in ((x - 1.38 * d, f"M{m}_GL{p}"), (x + 1.38 * d, f"M{m}_GH{p}")):
+                v = add_via(board, net(gnet), gx, yy(7.0))
+                t = pcbnew.PCB_TRACK(board); t.SetStart(P(gx, yy(6.375))); t.SetEnd(P(gx, yy(7.0)))
+                t.SetWidth(mm(0.25)); t.SetLayer(F); t.SetNet(net(gnet)); board.Add(t)
+            # VBAT island: drain pins + pad 10, with vias to the bottom VBAT pour
+            vx1, vx2 = (x + 0.389, x + 2.25) if m == 1 else (x - 2.25, x - 0.389)
+            add_zone(board, net("VBAT"), F, rect(vx1, yy(Y1 - 1.3), vx2, yy(Y1 + 0.55)), prio=4)
+            vi = x + 1.95 * d
+            if k < 2:                       # FET C's gap is under the driver's caps / MCU column
+                for dy in (-0.95, -0.25):
+                    add_via(board, net("VBAT"), vi, yy(Y1 + dy))
+            for dy in (-0.95, -0.32, 0.32, 0.95):
+                add_via(board, net("VBAT"), x + 0.672 * d, yy(Y1 + dy))
+        # M2 LS gap for FET1 is on its right, so the shunt pad needs its own patch
+        add_zone(board, net(f"M{m}_LS"), F, rect(4.2, yy(6.3), 5.6, yy(8.4)), prio=4)
+        # LS bus under the FET row, from the shunt to the last FET
+        add_zone(board, net(f"M{m}_LS"), F, rect(5.6, yy(7.45), 20.3, yy(9.65)), prio=4)
+        # bottom VBAT pour under the FET row
+        add_zone(board, net("VBAT"), B, rect(3.4, yy(3.75), 18.9, yy(6.6)), prio=3)
+    # bottom VBAT: BAT+ area and the left column joining both FET rows
+    add_zone(board, net("VBAT"), B, rect(0.3, 0.3 + 3.4, 3.4, 5.75), prio=3)
+    add_zone(board, net("VBAT"), B, rect(3.4, 3.75, 5.5, H - 3.75), prio=3)
+    # top GND at BAT- and the shunt ground ends
+    add_zone(board, net("GND"), F, rect(0.3, 6.1, 3.1, 13.9), prio=3)
+    # via arrays: BAT+ to bottom VBAT, BAT- to bottom GND
+    for x in (0.9, 1.6, 2.3):
+        for y in (4.2, 5.0):
+            add_via(board, net("VBAT"), x, y)
+        for y in (9.3, 10.0, 10.7):
+            add_via(board, net("GND"), x, y)
+
+def gnd_fill(board, gnd):
+    """Whole-board GND fill on both layers, lowest priority (added after routing)."""
+    for L in (pcbnew.F_Cu, pcbnew.B_Cu) + ((pcbnew.In1_Cu,) if LAYERS == 4 else ()):
+        make_zone(board, gnd, L, [(mm(OX + x), mm(OY + y)) for x, y in rect(0.0, 0.0, W, H)], 0, True)
+
+# ------------------------------------------------------------- design rules
+NETCLASSES = [
+    dict(name="Default", clearance=0.15, track_width=0.2, via_diameter=0.5, via_drill=0.25),
+    dict(name="Gate", clearance=0.15, track_width=0.25, via_diameter=0.5, via_drill=0.25),
+    dict(name="Power", clearance=0.15, track_width=0.3, via_diameter=0.5, via_drill=0.25),
+]
+PATTERNS = [("Gate", "M?_GH?"), ("Gate", "M?_GL?"), ("Gate", "M?_A"), ("Gate", "M?_B"), ("Gate", "M?_C"),
+            ("Power", "VBAT"), ("Power", "GND"), ("Power", "M?_LS"),
+            ("Power", "+5V"), ("Power", "BEC_SW")]
+def write_rules():
+    pro = json.load(open(PRO)) if os.path.exists(PRO) else {}
+    ns = pro.setdefault("net_settings", {})
+    base = dict(bus_width=12, diff_pair_gap=0.25, diff_pair_via_gap=0.25, diff_pair_width=0.2,
+                line_style=0, microvia_diameter=0.3, microvia_drill=0.1, pcb_color="rgba(0, 0, 0, 0.000)",
+                schematic_color="rgba(0, 0, 0, 0.000)", wire_width=6, priority=2147483647)
+    ns["classes"] = [dict(base, **c) for c in NETCLASSES]
+    ns["netclass_patterns"] = [dict(netclass=c, pattern=p) for c, p in PATTERNS]
+    ns["meta"] = {"version": 4}
+    ds = pro.setdefault("board", {}).setdefault("design_settings", {})
+    ds.setdefault("rules", {}).update(dict(min_clearance=0.15, min_track_width=0.15, min_via_diameter=0.45,
+        min_through_hole_diameter=0.2, min_via_annular_width=0.1, min_copper_edge_clearance=0.3,
+        min_hole_to_hole=0.25, min_hole_clearance=0.2, min_connection=0.12, solder_mask_to_copper_clearance=0.0))
+    pro.setdefault("meta", {"filename": "dual_esc.kicad_pro", "version": 3})
+    json.dump(pro, open(PRO, "w"), indent=2)
 
 if __name__ == "__main__":
     main()

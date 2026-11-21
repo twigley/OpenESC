@@ -56,72 +56,78 @@ two_pin("C_H", "C", False, [pl((0.508, -2.032), (0.508, 2.032), w=0.508), pl((-0
 two_pin("CP_V", "C", True, [pl((-2.032, 0.508), (2.032, 0.508), w=0.508),
                             "(arc (start -2.032 -1.016) (mid 0 -0.635) (end 2.032 -1.016) (stroke (width 0.508) (type default)) (fill (type none)))",
                             pl((-1.524, 1.524), (-0.508, 1.524)), pl((-1.016, 2.032), (-1.016, 1.016))], 2.032, 1)
-# N-channel MOSFET: G left, D top, S bottom. Pads 1-3 = S, 4 = G, 5-8 = D.
-SYM["NMOS"] = dict(ref="Q", power=False, ref_at=(1.6, 1.0), val_at=(1.6, -1.0), pins=
-    [("4", "G", "input", -2, 0, 0, 1, False)] +
-    [(n, "D", "passive", 1, 2, 270, 1, n != "5") for n in "5678"] +
-    [(n, "S", "passive", 1, -2, 90, 1, n != "1") for n in "123"], gfx=[
-    pl((-2.54, 0), (-1.778, 0)), pl((-1.778, 1.905), (-1.778, -1.905)),
-    pl((-1.016, 1.905), (-1.016, 1.27)), pl((-1.016, 0.381), (-1.016, -0.381)), pl((-1.016, -1.27), (-1.016, -1.905)),
-    pl((-1.016, 1.588), (2.54, 1.588), (2.54, 2.54)), pl((-1.016, -1.588), (2.54, -1.588), (2.54, -2.54)),
-    pl((-1.016, 0), (2.54, 0), (2.54, -1.588)),
-    pl((-1.016, 0), (0, 0.508), (0, -0.508), (-1.016, 0), fill="outline"),
-    "(circle (center 0.508 0) (radius 2.794) (stroke (width 0.254) (type default)) (fill (type none)))"])
+two_pin("L_H", "L", False, ["(arc (start -2.54 0) (mid -1.905 0.635) (end -1.27 0) (stroke (width 0.254) (type default)) (fill (type none)))",
+                           "(arc (start -1.27 0) (mid -0.635 0.635) (end 0 0) (stroke (width 0.254) (type default)) (fill (type none)))",
+                           "(arc (start 0 0) (mid 0.635 0.635) (end 1.27 0) (stroke (width 0.254) (type default)) (fill (type none)))",
+                           "(arc (start 1.27 0) (mid 1.905 0.635) (end 2.54 0) (stroke (width 0.254) (type default)) (fill (type none)))"])
 SYM["PAD"] = dict(ref="P", power=False, ref_at=(1.5, 1.0), val_at=(1.5, -1.0),
     pins=[("1", "1", "passive", -1, 0, 0, 1, False)],
     gfx=["(circle (center 0.508 0) (radius 0.508) (stroke (width 0.254) (type default)) (fill (type none)))"])
-SYM["RESONATOR"] = dict(ref="Y", power=False, ref_at=(1.5, 1.0), val_at=(1.5, -1.0), pins=[
-    ("1", "1", "passive", 0, 2, 270, 1, False), ("3", "3", "passive", 0, -2, 90, 1, False),
-    ("2", "GND", "passive", -2, 0, 0, 1, False)], gfx=[
-    "(rectangle (start -1.016 0.762) (end 1.016 -0.762) (stroke (width 0.254) (type default)) (fill (type none)))",
-    pl((-1.524, 1.27), (1.524, 1.27)), pl((-1.524, -1.27), (1.524, -1.27)),
-    pl((0, 2.54), (0, 1.27)), pl((0, -2.54), (0, -1.27)), pl((-2.54, 0), (-1.016, 0))])
+
+def nmos_gfx(dy):
+    """N-MOSFET drawing centred at (0, dy) mm: gate lead from x = -5.08, drain up, source down."""
+    g = lambda *p: pl(*[(x, y + dy) for x, y in p])
+    return [g((-5.08, 0), (-1.778, 0)), g((-1.778, 1.905), (-1.778, -1.905)),
+            g((-1.016, 1.905), (-1.016, 1.27)), g((-1.016, 0.381), (-1.016, -0.381)), g((-1.016, -1.27), (-1.016, -1.905)),
+            g((-1.016, 1.588), (2.54, 1.588), (2.54, 2.54)), g((-1.016, -1.588), (2.54, -1.588), (2.54, -2.54)),
+            g((-1.016, 0), (2.54, 0), (2.54, -1.588)),
+            pl((-1.016, dy), (0, dy + 0.508), (0, dy - 0.508), (-1.016, dy), fill="outline"),
+            f"(circle (center 0.508 {mmr(dy)}) (radius 2.794) (stroke (width 0.254) (type default)) (fill (type none)))"]
+# AON7934 dual asymmetric half-bridge, drawn as its two MOSFETs.
+# Q1 (high side): G1 = 1, D1 = 2,3,4,10; Q2 (low side): G2 = 8, S2 = 5,6,7; S1/D2 (switch node) = 9.
+SYM["AON7934"] = dict(ref="Q", power=False, ref_at=(4.5, 3.0), val_at=(4.5, 2.0), pins=
+    [("1", "G1", "input", -3, 2, 0, 1, False), ("8", "G2", "input", -3, -2, 0, 1, False),
+     ("9", "S1/D2", "passive", 4, 0, 180, 3, False)] +
+    [(n, "D1", "passive", 1, 5, 270, 1, n != "2") for n in ("2", "3", "4", "10")] +
+    [(n, "S2", "passive", 1, -5, 90, 1, n != "5") for n in ("5", "6", "7")],
+    gfx=nmos_gfx(5.08) + nmos_gfx(-5.08) + [pl((2.54, 10.16), (2.54, 7.62)), pl((2.54, -7.62), (2.54, -10.16))])
 def power_sym(name, down):
     g = ([pl((0, 0), (0, -1.27), (1.27, -1.27), (0, -2.54), (-1.27, -1.27), (0, -1.27))] if down else
          [pl((0, 0), (0, 1.27)), pl((-0.762, 0.762), (0, 1.27), (0.762, 0.762))])
     SYM["PWR_" + name] = dict(ref="#PWR", power=True, net=name, pins=[("1", name, "power_in", 0, 0, 270 if down else 90, 0, True)],
                              gfx=g, ref_at=(0, -3 if down else 3), val_at=(0, -1.6 if down else 1.4))
-for n, d in (("GND", True), ("VBAT", False), ("+5V", False)):
+for n, d in (("GND", True), ("VBAT", False), ("+5V", False), ("+3V3", False)):
     power_sym(n, d)
-# ERC power flag: an ordinary (non-global) symbol whose power_out pin marks the net it
-# touches as driven. '#' reference keeps it off the BOM and the board.
 SYM["PWR_FLAG"] = dict(ref="#FLG", power=False, flag=True, ref_at=(0, 1.6), val_at=(0, 2.6),
     pins=[("1", "pwr", "power_out", 0, 0, 90, 0, False)],
     gfx=[pl((0, 0), (0, 1.27), (-1.016, 1.905), (0, 2.54), (1.016, 1.905), (0, 1.27))])
 
-# DRV8300DPWR: right-side rows line up with the three half-bridges drawn beside it.
-PH_PITCH = 24
-def drv_right():
-    out = []
-    pinmap = {"A": ("19", "20", "18", "11"), "B": ("16", "17", "15", "10"), "C": ("13", "14", "12", "9")}
-    for k, p in enumerate("ABC"):
-        gh, bst, sh, gl = pinmap[p]
-        b = k * PH_PITCH
-        out += [(b + 5, gh, "GH" + p, "output"), (b + 7, bst, "BST" + p, "passive"),
-                (b + 9, sh, "SH" + p, "passive"), (b + 15, gl, "GL" + p, "output")]
-    return out
-DRV_LEFT = [(22, "1", "INHA", "input"), (23, "2", "INHB", "input"), (24, "3", "INHC", "input"),
-            (26, "4", "INLA", "input"), (27, "5", "INLB", "input"), (28, "6", "INLC", "input"),
-            (40, "7", "GVDD", "power_in"), (60, "8", "GND", "power_in")]
-box_symbol("DRV8300DPWR", "U", DRV_LEFT, drv_right(), 8)
+# DRV8300DRGE (VQFN-24). Right side: per phase k rows 24k+0 BST, +2 SH, +4 GH, +8 GL,
+# lining up with the half-bridge drawn beside it (FET centre at row 24k + 6).
+PH = 24
+DRV_RIGHT = []
+for k, (p, bst, sh, gh, gl) in enumerate((("A", "20", "18", "19", "11"), ("B", "17", "15", "16", "10"), ("C", "14", "12", "13", "9"))):
+    b = PH * k
+    DRV_RIGHT += [(b, bst, "BST" + p, "passive"), (b + 2, sh, "SH" + p, "passive"),
+                  (b + 4, gh, "GH" + p, "output"), (b + 8, gl, "GL" + p, "output")]
+DRV_LEFT = [(0, "22", "INHA", "input"), (1, "1", "INLA", "input"), (2, "23", "INHB", "input"),
+            (3, "2", "INLB", "input"), (4, "24", "INHC", "input"), (5, "3", "INLC", "input"),
+            (8, "4", "GVDD", "power_in"), (10, "5", "MODE", "input"), (11, "21", "DT", "input"),
+            (12, "7", "NC", "passive"), (13, "8", "NC", "passive"), (15, "6", "GND", "power_in"), (16, "25", "EP", "power_in")]
+box_symbol("DRV8300DRGE", "U", DRV_LEFT, DRV_RIGHT, 10)
 
-MCU_LEFT = [(0, "4", "VCC", "power_in"), (1, "6", "VCC", "power_in"), (2, "18", "AVCC", "power_in"),
-            (4, "20", "AREF", "passive"), (9, "29", "PC6/~{RESET}", "input"),
-            (12, "7", "PB6/XTAL1", "bidirectional"), (16, "8", "PB7/XTAL2", "bidirectional"),
-            (19, "19", "ADC6", "input"), (20, "22", "ADC7", "input"),
-            (23, "3", "GND", "power_in"), (24, "5", "GND", "power_in"), (25, "21", "GND", "power_in"), (26, "33", "EP", "power_in")]
-MCU_RIGHT_ORDER = ["12", "13", "14", "15", "16", "17", None, "23", "24", "25", "26", "27", "28", None,
-                   "30", "31", "32", "1", "2", "9", "10", "11"]
-MCU_NAMES = {"12": "PB0", "13": "PB1", "14": "PB2", "15": "PB3/MOSI", "16": "PB4/MISO", "17": "PB5/SCK",
-             "23": "PC0", "24": "PC1/ADC1", "25": "PC2/ADC2", "26": "PC3", "27": "PC4", "28": "PC5",
-             "30": "PD0/RXD", "31": "PD1/TXD", "32": "PD2", "1": "PD3", "2": "PD4", "9": "PD5", "10": "PD6", "11": "PD7"}
-MCU_RIGHT = [(i + 1, n, MCU_NAMES[n], "bidirectional") for i, n in enumerate(MCU_RIGHT_ORDER) if n]
-box_symbol("ATmega328P-MU", "U", MCU_LEFT, MCU_RIGHT, 14)
-box_symbol("MCP1703A-5002", "U", [(0, spec.LDO_PINS["VIN"], "VIN", "power_in"), (2, spec.LDO_PINS["GND"], "GND", "power_in")],
-           [(0, spec.LDO_PINS["VOUT"], "VOUT", "power_out")], 6)
-box_symbol("CONN6", "J", [], [(3*i - 2, str(i), str(i), "passive") for i in range(1, 7)], 4)
-box_symbol("CONN3", "J", [], [(3*i - 2, str(i), str(i), "passive") for i in range(1, 4)], 4)
-box_symbol("CONN2", "P", [], [(0, "1", "+", "passive"), (2, "2", "-", "passive")], 4)
+# AT32F421K8U7 (QFN32). Right rows 0-5 line up with the driver inputs.
+MCU_RIGHT = [(0, "20", "PA10/TMR1_CH3", "bidirectional"), (1, "15", "PB1/TMR1_CH3N", "bidirectional"),
+             (2, "19", "PA9/TMR1_CH2", "bidirectional"), (3, "14", "PB0/TMR1_CH2N", "bidirectional"),
+             (4, "18", "PA8/TMR1_CH1", "bidirectional"), (5, "13", "PA7/TMR1_CH1N", "bidirectional"),
+             (7, "6", "PA0/CMP_INM6", "bidirectional"), (8, "10", "PA4/CMP_INM4", "bidirectional"),
+             (9, "11", "PA5/CMP_INM5", "bidirectional"), (10, "7", "PA1/CMP_INP", "bidirectional"),
+             (11, "12", "PA6/ADC6", "bidirectional"), (12, "9", "PA3/ADC3", "bidirectional"),
+             (14, "8", "PA2/TMR15_CH1", "bidirectional"), (15, "29", "PB6/USART1_TX", "bidirectional"),
+             (17, "23", "PA13/SWDIO", "bidirectional"), (18, "24", "PA14/SWCLK", "bidirectional")]
+MCU_LEFT = [(0, "1", "VDD", "power_in"), (1, "17", "VDD", "power_in"), (2, "5", "VDDA", "power_in"),
+            (4, "4", "NRST", "input"), (6, "31", "BOOT0", "input"),
+            (8, "2", "PF0", "bidirectional"), (9, "3", "PF1", "bidirectional"), (10, "16", "PB2", "bidirectional"),
+            (11, "21", "PA11", "bidirectional"), (12, "22", "PA12", "bidirectional"), (13, "25", "PA15", "bidirectional"),
+            (14, "26", "PB3", "bidirectional"), (15, "27", "PB4", "bidirectional"), (16, "28", "PB5", "bidirectional"),
+            (17, "30", "PB7", "bidirectional"), (18, "32", "PB8", "bidirectional"), (20, "33", "VSS/EP", "power_in")]
+box_symbol("AT32F421K8U7", "U", MCU_LEFT, MCU_RIGHT, 16)
+box_symbol("INA186A1", "U", [(0, "4", "IN+", "input"), (2, "5", "IN-", "input"), (4, "3", "VS", "power_in"),
+                             (6, "2", "GND", "power_in"), (7, "1", "REF", "input")], [(0, "6", "OUT", "output")], 8)
+box_symbol("TPS62933", "U", [(0, "3", "VIN", "power_in"), (2, "2", "EN", "input"), (4, "1", "RT", "input"), (6, "4", "GND", "power_in")],
+           [(0, "6", "BST", "passive"), (2, "5", "SW", "output"), (4, "8", "FB", "input"), (6, "7", "SS", "passive")], 8)
+box_symbol("TLV75533PDBV", "U", [(0, "1", "IN", "power_in"), (2, "3", "EN", "input"), (4, "2", "GND", "power_in")],
+           [(0, "5", "OUT", "power_out"), (4, "4", "NC", "passive")], 8)
 
 # ------------------------------------------------------------- drawing state
 inst = []      # (ref, symname, x, y, value, footprint, mpn)
@@ -147,7 +153,7 @@ def wire(*pts):
     for a, b in zip(pts, pts[1:]):
         assert a[0] == b[0] or a[1] == b[1], f"non-orthogonal wire {a}->{b}"
         wires.append((a, b))
-def glabel(name, x, y, side):   # side: which way the label points ('L' text extends left)
+def glabel(name, x, y, side):
     labels.append(("global_label", name, x, y, side))
 def label(name, x, y, side="R"):
     labels.append(("label", name, x, y, side))
@@ -155,171 +161,191 @@ def text(s, x, y, size=2.5):
     texts.append((s, x, y, size))
 def frame(title, x1, y1, x2, y2):
     boxes.append((x1, y1, x2, y2)); text(title, x1 + 1, y1 + 2, 2.5)
-
 def pin_end(ref_or_inst, num):
     i = next(t for t in inst if t[0] == ref_or_inst)
     _, s, x, y = i[:4]
     p = next(p for p in SYM[s]["pins"] if p[0] == num)
     return (x + p[3], y - p[4])
+def nc(ref, num): ncs.append((ref, num))
 
-# ------------------------------------------------------------- motor channel
+def cap_to_gnd(ref, x, y_top, top_net=None, sym="C_V"):
+    """Vertical cap with its top pin at (x, y_top) and GND below."""
+    place(ref, sym, x, y_top + 1); pwr("GND", x, y_top + 2)
+    if top_net: pwr(top_net, x, y_top)
+
+# ------------------------------------------------------------- one motor channel
 def motor(m, OX, OY):
-    U_ = f"U{m}"
-    drv_cy = OY
-    place(U_, "DRV8300DPWR", OX + 8, drv_cy)     # pin ends at OX+2 (left), OX+14 (right)
-    L, R = OX + 2, OX + 14
-    frame(f"MOTOR {m}: DRV8300 3-PHASE GATE DRIVER AND POWER STAGE", OX - 12, OY - 4, OX + 70, OY + 3 * PH_PITCH - 2)
-    # inputs from MCU
-    for row, num, nm, _ in DRV_LEFT[:6]:
-        y = drv_cy + row
-        wire((L, y), (L - 3, y)); glabel(f"M{m}_{nm}", L - 3, y, "L")
-    # GVDD with local decoupling, GND
-    yg = drv_cy + 40
-    wire((L, yg), (L - 9, yg))
-    for k, (cref, cx) in enumerate(((f"C{6+m}", L - 3), (f"C{8+m}", L - 6))):
-        place(cref, "C_V", cx, yg + 1); pwr("GND", cx, yg + 2)
-    pwr("VBAT", L - 9, yg)
-    text("GVDD from battery (5-20 V)", L - 11, yg - 2, 1.27)
-    y0 = drv_cy + 60
-    wire((L, y0), (L - 2, y0), (L - 2, y0 + 1)); pwr("GND", L - 2, y0 + 1)
-
-    qn = 6 * (m - 1)
-    xb = R + 24
-    for k, p in enumerate("ABC"):
-        Y = drv_cy + k * PH_PITCH
-        qh, ql = f"Q{qn + 2*k + 1}", f"Q{qn + 2*k + 2}"
-        rgh, rgl = f"R{qn + 2*k + 1}", f"R{qn + 2*k + 2}"
-        rph, rpl = f"R{12 + qn + 2*k + 1}", f"R{12 + qn + 2*k + 2}"
-        cb = f"C{3*(m-1) + k + 1}"; cbus = f"C{10 + 3*(m-1) + k + 1}"; pad = f"P{1 + 3*(m-1) + k + 1}"
-        # high side
-        pwr("VBAT", xb + 1, Y + 1); wire((xb + 1, Y + 1), (xb + 1, Y + 3))
-        place(qh, "NMOS", xb, Y + 5)
-        place(rgh, "R_H", xb - 7, Y + 5); wire((xb - 5, Y + 5), (xb - 2, Y + 5))
-        place(rph, "R_V", xb - 3, Y + 7)
-        wire((xb - 3, Y + 9), (xb + 1, Y + 9))
-        wire((xb + 1, Y + 7), (xb + 1, Y + 13))          # source(high) -> drain(low)
-        wire((xb + 1, Y + 11), (xb + 5, Y + 11)); place(pad, "PAD", xb + 6, Y + 11)
-        # low side
-        place(ql, "NMOS", xb, Y + 15)
-        place(rgl, "R_H", xb - 7, Y + 15); wire((xb - 5, Y + 15), (xb - 2, Y + 15))
-        place(rpl, "R_V", xb - 3, Y + 17)
-        wire((xb + 1, Y + 17), (xb + 1, Y + 20)); wire((xb - 3, Y + 19), (xb + 1, Y + 19)); pwr("GND", xb + 1, Y + 20)
-        # bus decoupling next to the half-bridge
-        cx = xb + 14
-        pwr("VBAT", cx, Y + 7); wire((cx, Y + 7), (cx, Y + 9)); place(cbus, "C_V", cx, Y + 10)
-        wire((cx, Y + 11), (cx, Y + 13)); pwr("GND", cx, Y + 13)
-        # driver -> bridge
-        dy = drv_cy + k * PH_PITCH  # driver rows for this phase are at dy+5/7/9/15
-        wire((R, dy + 5), (xb - 9, Y + 5))
-        wire((R, dy + 15), (xb - 9, Y + 15))
-        wire((R, dy + 9), (xb - 3, Y + 9))
-        wire((R, dy + 7), (R + 3, dy + 7)); place(cb, "C_V", R + 3, dy + 8)
-    # bulk
-    bx = xb + 22
-    for j, cref in enumerate((f"C{16 + 2*m - 1}", f"C{16 + 2*m}")):
-        x = bx + 5 * j
-        pwr("VBAT", x, drv_cy + 7); wire((x, drv_cy + 7), (x, drv_cy + 9)); place(cref, "CP_V", x, drv_cy + 10)
-        wire((x, drv_cy + 11), (x, drv_cy + 13)); pwr("GND", x, drv_cy + 13)
-    text("Bulk", bx - 1, drv_cy + 5, 1.27)
-
-# ------------------------------------------------------------- MCU
-def mcu(MX, MY):
-    place("U3", "ATmega328P-MU", MX, MY)
-    L, R = MX - 9, MX + 9
-    frame("MICROCONTROLLER ATmega328P (same chip as Arduino Nano)", MX - 40, MY - 6, MX + 32, MY + 32)
-    r = lambda row: MY + row
-    # supply pins
+    b = 100 * m
+    N = lambda s: f"M{m}_{s}"
+    MX = OX + 44                       # MCU centre; pins end at MX -/+ 10
+    L, R = MX - 10, MX + 10
+    Dxl = R + 24                       # driver left pin ends
+    DX = Dxl + 7; Dxr = Dxl + 14       # driver centre / right pin ends
+    Qx = Dxr + 12                      # half-bridge symbol x
+    frame(f"MOTOR {m}: AT32F421 (AM32 RR_ROBOT_DUAL_ESC_F421), DRV8300 DRIVER, AON7934 HALF-BRIDGES",
+          OX, OY - 12, Qx + 66, OY + 80)
+    place(f"U{b+1}", "AT32F421K8U7", MX, OY)
+    place(f"U{b+2}", "DRV8300DRGE", DX, OY)
+    # MCU -> driver: six straight wires (rows 0-5)
+    for row in range(6):
+        wire((R, OY + row), (Dxl, OY + row))
+    # MCU supply and decoupling (one cap per supply pin)
     for row in (0, 1, 2):
-        wire((L, r(row)), (L - 3, r(row)))
-    wire((L - 3, r(0)), (L - 3, r(2))); wire((L - 3, r(0)), (L - 3, r(-1))); pwr("+5V", L - 3, r(-1))
-    # AREF
-    wire((L, r(4)), (L - 2, r(4))); place("C26", "C_V", L - 2, r(5)); pwr("GND", L - 2, r(6))
-    # reset
-    wire((L, r(9)), (L - 12, r(9)))
-    place("R25", "R_V", L - 5, r(7)); pwr("+5V", L - 5, r(5))
-    place("C28", "C_H", L - 13, r(9)); wire((L - 14, r(9)), (L - 16, r(9))); label("DTR", L - 16, r(9), "L")
-    label("~{RESET}", L - 8, r(9), "R")
-    # resonator
-    wire((L, r(12)), (L - 6, r(12))); wire((L, r(16)), (L - 6, r(16)))
-    place("Y1", "RESONATOR", L - 6, r(14))
-    wire((L - 8, r(14)), (L - 10, r(14)), (L - 10, r(15))); pwr("GND", L - 10, r(15))
-    for row, num in ((19, "19"), (20, "22")):
-        ncs.append(("U3", num))
-    for row in (23, 24, 25, 26):
-        wire((L, r(row)), (L - 2, r(row)))
-    wire((L - 2, r(23)), (L - 2, r(27))); pwr("GND", L - 2, r(27))
-    # decoupling, one per supply pin
-    for j, c in enumerate(("C23", "C24", "C25")):
-        x = MX - 36 + 4 * j
-        pwr("+5V", x, r(19)); wire((x, r(19)), (x, r(20))); place(c, "C_V", x, r(21)); wire((x, r(22)), (x, r(23))); pwr("GND", x, r(23))
-    text("Decoupling at U3 pins 4, 6, 18", MX - 37, r(17), 1.27)
-    # signal pins -> global labels
-    nets = SPEC["U3"][4]
-    for row, num, nm, _ in MCU_RIGHT:
-        y = r(row); net = nets[num]
-        if net is None:
-            ncs.append(("U3", num)); continue
-        wire((R, y), (R + 3, y))
-        (glabel if net.startswith("M") else label)(net, R + 3, y, "R")
+        wire((L, OY + row), (L - 3, OY + row))
+    wire((L - 3, OY), (L - 3, OY + 2)); wire((L - 3, OY), (L - 3, OY - 2)); pwr("+3V3", L - 3, OY - 2)
+    for j, (c, note) in enumerate(((f"C{b+1}", "pin 1"), (f"C{b+2}", "pin 17"), (f"C{b+3}", "VDDA"))):
+        x = OX + 4 + 5 * j
+        cap_to_gnd(c, x, OY + 1, "+3V3")
+    text("Decoupling at VDD 1, VDD 17, VDDA", OX + 2, OY - 3, 1.27)
+    # NRST: 100 nF to GND + SWD pad; BOOT0: 10k to GND
+    wire((L, OY + 4), (L - 14, OY + 4))
+    cap_to_gnd(f"C{b+4}", L - 6, OY + 4)
+    place(f"P{b+8}", "PAD", L - 13, OY + 4)            # pad pin end at L-14
+    place(f"R{b+1}", "R_H", L - 2, OY + 6)             # right pin at L (BOOT0), left at L-4
+    wire((L - 4, OY + 6), (L - 4, OY + 7)); pwr("GND", L - 4, OY + 7)
+    for row, num, *_ in MCU_LEFT:
+        if 8 <= row <= 18: nc(f"U{b+1}", num)
+    wire((L, OY + 20), (L - 2, OY + 20), (L - 2, OY + 21)); pwr("GND", L - 2, OY + 21)
+    # MCU right: sense inputs by label, signal / telemetry / SWD to pads
+    for row, net in ((7, "BEMF_A"), (8, "BEMF_B"), (9, "BEMF_C"), (10, "NEUT"), (11, "ISENSE")):
+        wire((R, OY + row), (R + 3, OY + row)); label(N(net), R + 3, OY + row)
+    wire((R, OY + 12), (R + 3, OY + 12)); label("VSENSE", R + 3, OY + 12)
+    place(f"R{b+2}", "R_H", R + 4, OY + 14)            # 100R: pins R+2 / R+6
+    wire((R, OY + 14), (R + 2, OY + 14)); wire((R + 6, OY + 14), (R + 8, OY + 14))
+    place(f"P{b+4}", "PAD", R + 9, OY + 14)
+    text(f"SIG{m} in (servo/DShot)", R + 11, OY + 13, 1.27)
+    for row, pad, what in ((15, f"P{b+5}", f"TLM{m} (telemetry out)"), (17, f"P{b+6}", f"SWDIO{m}"), (18, f"P{b+7}", f"SWCLK{m}")):
+        wire((R, OY + row), (R + 8, OY + row)); place(pad, "PAD", R + 9, OY + row)
+        text(what, R + 11, OY + row - 1, 1.27)
+    text("NRST / SWD pads: flash AM32 bootloader once", L - 26, OY + 2, 1.27)
+    # driver supply: GVDD from VBAT with 10 uF + 100 nF; MODE, DT, NC open; GND
+    yg = OY + 8
+    wire((Dxl, yg), (Dxl - 9, yg))
+    cap_to_gnd(f"C{b+5}", Dxl - 3, yg); cap_to_gnd(f"C{b+6}", Dxl - 6, yg)
+    pwr("VBAT", Dxl - 9, yg)
+    for num in ("5", "21", "7", "8"): nc(f"U{b+2}", num)
+    text("MODE open: GLx = INLx; DT open: 200 ns", Dxl - 12, OY + 21, 1.27)
+    wire((Dxl, OY + 15), (Dxl - 2, OY + 15), (Dxl - 2, OY + 16)); wire((Dxl, OY + 16), (Dxl - 2, OY + 16))
+    wire((Dxl - 2, OY + 16), (Dxl - 2, OY + 17)); pwr("GND", Dxl - 2, OY + 17)
+    # half-bridges
+    LS = Qx + 10                       # low-side source rail
+    for k, p in enumerate("ABC"):
+        Y = OY + PH * k + 6
+        q = f"Q{b+k+1}"
+        place(q, "AON7934", Qx, Y)
+        # bootstrap cap BST -> SH, SH loop to the switch node
+        wire((Dxr, Y - 6), (Dxr + 3, Y - 6)); place(f"C{b+7+k}", "C_V", Dxr + 3, Y - 5)
+        wire((Dxr, Y - 4), (Qx - 6, Y - 4), (Qx - 6, Y - 9), (Qx + 7, Y - 9), (Qx + 7, Y))
+        wire((Qx + 4, Y), (Qx + 7, Y), (Qx + 16, Y))
+        label(N(p), Qx + 11, Y)
+        place(f"P{b+k+1}", "PAD", Qx + 17, Y)
+        text(f"M{m} {p}", Qx + 19, Y - 1, 1.27)
+        # gates (no series resistor: space; DRV8300 drive strength sets the edges)
+        wire((Dxr, Y - 2), (Qx - 3, Y - 2))
+        wire((Dxr, Y + 2), (Qx - 3, Y + 2))
+        place(f"R{b+3+k}", "R_V", Qx - 5, Y + 4); pwr("GND", Qx - 5, Y + 6)   # 10k GL pull-down
+        # drain to VBAT, source to the LS rail
+        wire((Qx + 1, Y - 5), (Qx + 1, Y - 6), (Qx + 3, Y - 6)); pwr("VBAT", Qx + 3, Y - 6)
+        wire((Qx + 1, Y + 5), (Qx + 1, Y + 7), (LS, Y + 7))
+        # bus cap at the half-bridge
+        cap_to_gnd(f"C{b+10+k}", Qx + 21, Y - 4, "VBAT")
+    yA, yC = OY + 6 + 7, OY + 2 * PH + 6 + 7
+    # current sense: LS rail -> 0.5 mOhm shunt -> GND, INA186A1 (25 V/V) -> RC -> PA6
+    ys = yC + 4
+    wire((LS, yA), (LS, ys))
+    place(f"R{b+50}", "R_V", LS, ys + 2); pwr("GND", LS, ys + 4)
+    text("Shunt 0.5 mOhm x 25 V/V = 12.5 mV/A (AM32 MILLIVOLT_PER_AMP 12)", LS + 2, ys + 6, 1.27)
+    IX = LS + 14
+    place(f"U{b+3}", "INA186A1", IX, ys)
+    wire((LS, ys), (IX - 6, ys))                       # IN+ (Kelvin to the shunt top)
+    wire((IX - 6, ys + 2), (IX - 8, ys + 2), (IX - 8, ys + 3)); pwr("GND", IX - 8, ys + 3)   # IN- (shunt GND end)
+    wire((IX - 6, ys + 4), (IX - 10, ys + 4)); pwr("+3V3", IX - 10, ys + 4)
+    cap_to_gnd(f"C{b+13}", IX - 12, ys + 4, "+3V3")
+    wire((IX - 6, ys + 6), (IX - 7, ys + 6), (IX - 7, ys + 7)); wire((IX - 6, ys + 7), (IX - 7, ys + 7))
+    wire((IX - 7, ys + 7), (IX - 7, ys + 8)); pwr("GND", IX - 7, ys + 8)
+    place(f"R{b+6}", "R_H", IX + 8, ys)                # pins IX+6 / IX+10
+    wire((IX + 10, ys), (IX + 14, ys)); label(N("ISENSE"), IX + 14, ys)
+    cap_to_gnd(f"C{b+14}", IX + 12, ys)
+    # BEMF dividers and virtual neutral
+    BX = Qx + 36
+    text("BEMF dividers 10k / 4.7k (8.4 V -> 2.7 V) and virtual neutral 3 x 10k / 1.5k", BX - 2, OY - 6, 1.27)
+    for k, (p, rt, rb) in enumerate((("A", 7, 8), ("B", 9, 10), ("C", 11, 12))):
+        y = OY + 6 * k
+        label(N(p), BX, y, "L"); wire((BX, y), (BX + 2, y))
+        place(f"R{b+rt}", "R_H", BX + 4, y)            # pins BX+2 / BX+6
+        wire((BX + 6, y), (BX + 14, y)); label(N("BEMF_" + p), BX + 14, y)
+        place(f"R{b+rb}", "R_V", BX + 9, y + 2); pwr("GND", BX + 9, y + 4)
+    yN = OY + 22
+    for k, p in enumerate("ABC"):
+        y = yN + 3 * k
+        label(N(p), BX, y, "L"); wire((BX, y), (BX + 2, y))
+        place(f"R{b+13+k}", "R_H", BX + 4, y)
+        wire((BX + 6, y), (BX + 9, y))
+    wire((BX + 9, yN), (BX + 9, yN + 6)); wire((BX + 9, yN + 6), (BX + 14, yN + 6)); label(N("NEUT"), BX + 14, yN + 6)
+    place(f"R{b+16}", "R_V", BX + 9, yN + 8); pwr("GND", BX + 9, yN + 10)
 
-def conn_pins(ref, X, Y, nets_by_pin, glob=()):
-    """Connector at (X, Y); pin i at y = Y + 3i - 2. Power nets get a symbol, others a label."""
-    place(ref, "CONN6" if len(nets_by_pin) == 6 else "CONN3", X, Y); jx = X + 4
-    items = sorted(nets_by_pin.items())
-    for idx, (i, net) in enumerate(items):
-        y = Y + 3 * i - 2
-        nxt = items[idx + 1][1] if idx + 1 < len(items) else None
-        if net == "GND":
-            wire((jx, y), (jx + 2, y))
-            if nxt == "GND": wire((jx + 2, y), (jx + 2, y + 3))
-            else: pwr("GND", jx + 2, y)
-        elif net == "+5V":
-            wire((jx, y), (jx + 10, y)); pwr("+5V", jx + 10, y)
-        else:
-            wire((jx, y), (jx + 5, y)); (glabel if net in glob else label)(net, jx + 5, y, "R")
-
-def programming(X, Y):
-    frame("PROGRAMMING", X - 2, Y - 4, X + 40, Y + 23)
-    text("J1 USB-serial (FTDI order)", X - 1, Y - 1, 1.27)
-    conn_pins("J1", X, Y + 2, {1: "GND", 2: "GND", 3: "+5V", 4: "RXD", 5: "TXD", 6: "DTR"})
-    text("J2 ISP (TC2030), battery OFF", X + 19, Y - 1, 1.27)
-    conn_pins("J2", X + 20, Y + 2, {1: "M2_INLB", 2: "+5V", 3: "SCK", 4: "M1_INHC", 5: "~{RESET}", 6: "GND"},
-              glob=("M2_INLB", "M1_INHC"))
-    text("MISO = M2_INLB, MOSI = M1_INHC", X + 19, Y + 22, 1.27)
-
+# ------------------------------------------------------------- shared supply
 def supply(X, Y):
-    frame("BATTERY INPUT (2S) AND 5 V SUPPLY", X - 2, Y - 4, X + 62, Y + 10)
-    place("P1", "CONN2", X, Y + 1)                  # pins at (X+4, Y+1) and (X+4, Y+3)
-    yv, yg = Y + 1, Y + 3
-    pwr("VBAT", X + 6, yv - 0); pwr("GND", X + 6, yg + 4)
-    caps = ["C21"]
-    xend = X + 8 + 5 * len(caps)
-    wire((X + 4, yv), (xend, yv)); wire((X + 4, yg), (xend, yg))
-    wire((X + 6, yg), (X + 6, yg + 4))
-    for j, c in enumerate(caps):
-        place(c, "C_V", X + 9 + 5 * j, yv + 1)
-    flag(X + 7, yv); flag(X + 7, yg)      # battery is the source of VBAT and GND (ERC)
-    # LDO: VIN row 0, GND row 2 line up with the rails
-    place("U4", "MCP1703A-5002", xend + 5, yv)       # VIN at xend+0, VOUT at xend+10
-    vo = xend + 10
-    wire((vo, yv), (vo + 12, yv))
-    for j, c in enumerate(("C22", "C27")):
-        x = vo + 3 + 5 * j
-        place(c, "C_V", x, yv + 1); wire((x, yv + 2), (x, yv + 3)); pwr("GND", x, yv + 3)
-    pwr("+5V", vo + 12, yv)
-    text("C21 = LDO input cap; bulk caps sit at each bridge", X + 8, Y - 1, 1.27)
+    frame("BATTERY (2S Li-ion 6.0-8.4 V), 5 V BEC, 3.3 V LDO, Vbat SENSE", X - 2, Y - 6, X + 110, Y + 50)
+    # battery pads, flags
+    place("P1", "PAD", X + 1, Y); place("P2", "PAD", X + 1, Y + 4)
+    wire((X, Y), (X - 1, Y)); pwr("VBAT", X - 1, Y)
+    wire((X, Y + 4), (X - 1, Y + 4), (X - 1, Y + 5)); pwr("GND", X - 1, Y + 5)
+    text("BAT+ / BAT- pads", X + 3, Y + 2, 1.27)
+    pwr("VBAT", X + 8, Y + 8); wire((X + 8, Y + 8), (X + 8, Y + 9)); flag(X + 8, Y + 9)
+    pwr("GND", X + 12, Y + 10); wire((X + 12, Y + 10), (X + 12, Y + 9)); flag(X + 12, Y + 9)
+    # bulk caps on the battery leads
+    for i in range(4):
+        cap_to_gnd(f"C{i+1}", X + 18 + 5 * i, Y + 1, "VBAT", "CP_V")
+    text("C1-C4 220 uF: mounted on the battery leads, within 20 mm of P1/P2 (not on the PCB)", X + 14, Y - 2, 1.27)
+    # Vbat divider -> VSENSE (both MCUs PA3)
+    pwr("VBAT", X + 44, Y)
+    place("R1", "R_V", X + 44, Y + 2)
+    wire((X + 44, Y + 4), (X + 48, Y + 4)); label("VSENSE", X + 48, Y + 4)
+    place("R2", "R_V", X + 44, Y + 6); pwr("GND", X + 44, Y + 8)
+    text("100k / 10k (AM32 TARGET_VOLTAGE_DIVIDER 110)", X + 40, Y - 2, 1.27)
+    # buck: TPS62933 1.2 MHz -> +5V
+    BX, BY = X + 20, Y + 22
+    place("U1", "TPS62933", BX, BY)                    # left pins end BX-6, right BX+6
+    wire((BX - 6, BY), (BX - 14, BY)); pwr("VBAT", BX - 14, BY)
+    cap_to_gnd("C5", BX - 9, BY); cap_to_gnd("C6", BX - 12, BY)
+    nc("U1", "2")
+    wire((BX - 6, BY + 4), (BX - 8, BY + 4), (BX - 8, BY + 6)); wire((BX - 6, BY + 6), (BX - 8, BY + 6))
+    wire((BX - 8, BY + 6), (BX - 8, BY + 7)); pwr("GND", BX - 8, BY + 7)
+    text("RT to GND: 1.2 MHz; EN open: on", BX - 16, BY + 10, 1.27)
+    wire((BX + 6, BY), (BX + 9, BY)); place("C7", "C_V", BX + 9, BY + 1)       # BST cap to SW
+    wire((BX + 6, BY + 2), (BX + 9, BY + 2), (BX + 12, BY + 2))
+    place("L1", "L_H", BX + 14, BY + 2)                # pins BX+12 / BX+16
+    wire((BX + 16, BY + 2), (BX + 30, BY + 2)); pwr("+5V", BX + 30, BY + 2)
+    cap_to_gnd("C9", BX + 22, BY + 2); cap_to_gnd("C10", BX + 25, BY + 2)
+    place("R3", "R_V", BX + 19, BY + 4)                # top pin BX+19,BY+2 on +5V; bottom BY+6
+    wire((BX + 6, BY + 4), (BX + 17, BY + 4), (BX + 17, BY + 6), (BX + 19, BY + 6))
+    place("R4", "R_V", BX + 19, BY + 8); pwr("GND", BX + 19, BY + 10)
+    wire((BX + 6, BY + 6), (BX + 7, BY + 6), (BX + 7, BY + 9)); place("C8", "C_V", BX + 7, BY + 10); pwr("GND", BX + 7, BY + 11)
+    pwr("+5V", BX + 33, BY + 1); wire((BX + 33, BY + 1), (BX + 33, BY + 2)); flag(BX + 33, BY + 2)
+    text("5 V BEC to receiver pad", BX + 26, BY - 2, 1.27)
+    # pads for the receiver
+    place("P4", "PAD", BX + 37, BY + 6); wire((BX + 36, BY + 6), (BX + 34, BY + 6)); pwr("+5V", BX + 34, BY + 6)
+    place("P3", "PAD", BX + 37, BY + 9); wire((BX + 36, BY + 9), (BX + 34, BY + 9), (BX + 34, BY + 10)); pwr("GND", BX + 34, BY + 10)
+    text("5V / GND to receiver", BX + 39, BY + 7, 1.27)
+    # LDO: TLV75533 +5V -> +3V3
+    LX, LY = X + 80, Y + 22
+    place("U2", "TLV75533PDBV", LX, LY)
+    wire((LX - 6, LY), (LX - 10, LY)); pwr("+5V", LX - 10, LY)
+    wire((LX - 6, LY + 2), (LX - 8, LY + 2), (LX - 8, LY))
+    cap_to_gnd("C11", LX - 12, LY, "+5V")
+    wire((LX - 6, LY + 4), (LX - 7, LY + 4), (LX - 7, LY + 5)); pwr("GND", LX - 7, LY + 5)
+    nc("U2", "4")
+    wire((LX + 6, LY), (LX + 12, LY)); pwr("+3V3", LX + 12, LY)
+    cap_to_gnd("C12", LX + 9, LY)
+    # SWD supply / ground pads
+    place("P5", "PAD", LX + 17, LY + 8); wire((LX + 16, LY + 8), (LX + 14, LY + 8)); pwr("+3V3", LX + 14, LY + 8)
+    place("P6", "PAD", LX + 17, LY + 11); wire((LX + 16, LY + 11), (LX + 14, LY + 11), (LX + 14, LY + 12)); pwr("GND", LX + 14, LY + 12)
+    text("SWD 3V3 / GND", LX + 19, LY + 9, 1.27)
 
-def pots(X, Y):
-    frame("SPEED INPUTS (potentiometers)", X - 2, Y - 4, X + 40, Y + 11)
-    conn_pins("J3", X, Y, {1: "+5V", 2: "M1_SPD", 3: "GND"}, glob=("M1_SPD",))
-    conn_pins("J4", X + 20, Y, {1: "+5V", 2: "M2_SPD", 3: "GND"}, glob=("M2_SPD",))
-
-motor(1, 16, 8)
-motor(2, 100, 8)
-mcu(215, 14)
-programming(178, 58)
-supply(16, 92)
-pots(178, 90)
+motor(1, 6, 26)
+motor(2, 6, 124)
+supply(210, 26)
 
 # ------------------------------------------------------------- post-process
 def endpoints():
@@ -355,7 +381,7 @@ junctions = [p for p, d in deg.items() if d + pin_pts.get(p, 0) >= 3]
 # ------------------------------------------------------------- writer
 def lib_symbol(name, prefix=LIB + ":"):
     s = SYM[name]
-    hide_names = name in ("R_V", "R_H", "C_V", "C_H", "CP_V", "NMOS", "PAD", "RESONATOR", "PWR_FLAG") or s["power"]
+    hide_names = name in ("R_V", "R_H", "C_V", "C_H", "CP_V", "L_H", "AON7934", "PAD", "PWR_FLAG") or s["power"]
     head = f'(symbol "{prefix}{name}"' + (" (power)" if s["power"] else "")
     if hide_names: head += " (pin_numbers hide)"
     head += f' (pin_names (offset {"0" if s["power"] else "1.016"}){" hide" if hide_names else ""})'
@@ -379,8 +405,8 @@ def lib_symbol(name, prefix=LIB + ":"):
 def write():
     root = uid("root")
     o = [f'(kicad_sch (version 20231120) (generator "eeschema") (generator_version "8.0") (uuid "{root}") (paper "A1")',
-         '(title_block (title "OpenESC dual-motor SMD ESC") (date "2026-11-20") (rev "0.2") '
-         '(comment 1 "2S LiPo, 20 A peak per motor, ATmega328P + 2x DRV8300D") '
+         '(title_block (title "OpenESC dual-motor AM32 ESC") (date "2026-11-21") (rev "0.3") '
+         '(comment 1 "2S Li-ion, 2 x (AT32F421 + DRV8300 + 3 x AON7934), AM32 RR_ROBOT_DUAL_ESC_F421") '
          '(comment 2 "Drawn by hardware/dual_smd/tools/draw_schematic.py; netlist in gen_schematic.py"))',
          "(lib_symbols", *[lib_symbol(n) for n in sorted({i[1] for i in inst})], ")"]
     for x, y in junctions:
@@ -408,7 +434,7 @@ def write():
         props = [("Reference", ref, x + rx, y - ry, pw), ("Value", val, x + vx, y - vy, False),
                  ("Footprint", fp, x, y, True), ("Datasheet", "", x, y, True), ("Description", "", x, y, True)]
         if mpn: props.append(("MPN", mpn, x, y, True))
-        just = " (justify left)" if not pw and s not in ("ATmega328P-MU", "DRV8300DPWR", "MCP1703A-5002", "CONN6", "CONN3", "CONN2") else ""
+        just = " (justify left)" if not pw and s not in ("AT32F421K8U7", "DRV8300DRGE", "INA186A1", "TPS62933", "TLV75533PDBV") else ""
         L = [f'(symbol (lib_id "{LIB}:{s}") (at {mm(x)} {mm(y)} 0) (unit 1) (exclude_from_sim no) (in_bom {"no" if pw else "yes"}) (on_board {"no" if S.get("flag") else "yes"}) (dnp no) (uuid "{uid("s", ref)}")']
         for k, v, px, py, hid in props:
             j = just if k in ("Reference", "Value") else ""
