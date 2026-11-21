@@ -20,6 +20,7 @@ F, B = gr.F, gr.B
 G = gr.G
 R_TRK = (0.1 + 0.115 + gr.CLR) / G       # track centre keep-off from another net's track centre (0.345 mm)
 R_VIA = (0.2 + 0.1 + gr.CLR) / G          # via centre keep-off from another net's track centre (0.43 mm)
+DEBUG = os.environ.get('NEG_DEBUG') == '1'
 STEPS = ((1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0),
          (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414))
 VIA_COST = 12.0
@@ -43,6 +44,7 @@ class Router:
         nx, ny = self.g.nx, self.g.ny
         out = set()
         for idx, (L, k) in enumerate(path):
+            if self.g.cu[L][k] == self.cur_nid: continue      # inside the net's own pad / zone copper
             i, j = k % nx, k // nx
             via = idx > 0 and path[idx - 1][0] != L and path[idx - 1][1] == k
             for dset, layers in ((D_VIA, gr.LAYERS),) if via else ((D_TRK, (L,)),):
@@ -162,19 +164,25 @@ def main():
                 rest.sort(key=lambda pc: min(abs(k % g.nx - cx) for _, k in list(pc)[:5]))
                 pc = rest.pop(0)
                 if pc & tree: tree |= pc; continue
+                R.cur_nid = nid
                 path = R.search(nid, n, tree, pc)
                 if not path: failed.append(n); break
                 paths.append(path); tree |= set(path) | pc
                 R.add(n, R.footprint(path))
             routes[n] = paths
         # conflicts: a net's track centres (or via centres) inside another net's keep-off footprint
-        conflicted = set()
+        conflicted = set(); dbg = []
         for n, paths in routes.items():
             own = R.foot.get(n, {})
             for path in paths:
                 for c in path:
+                    if g.cu[c[0]][c[1]] == info[n][0]: continue
                     if R.occ[c[0]][c[1]] - (1 if own.get(c, 0) else 0) > 0:
                         conflicted.add(n); R.hist[c[0]][c[1]] += 0.5
+                        if DEBUG and len(dbg) < 12 and n not in [d[0] for d in dbg]:
+                            others = [m for m, f in R.foot.items() if m != n and f.get(c)]
+                            dbg.append((n, others, round(c[1] % g.nx * G, 2), round(c[1] // g.nx * G, 2), "F" if c[0] == F else "B"))
+        if DEBUG: print("conflicts:", dbg, flush=True)
         print(f"iter {it}: {len(todo)} rerouted, {len(conflicted)} nets overlap, {len(set(failed))} unroutable, {time.time()-t0:.0f}s", flush=True)
         if not conflicted and not failed:
             break

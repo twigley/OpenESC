@@ -17,7 +17,7 @@ routing: see [PCB status](#pcb-status). Not built. Part numbers marked
 | Battery | 2S Li-ion, 6.0 to 8.4 V |
 | Current | about 10-12 A per motor, limit set in AM32 |
 | Firmware | AM32, stock target `RR_ROBOT_DUAL_ESC_F421`, flashed on both MCUs; no `USE_INVERTED_*` |
-| Board | 28 x 20 mm, 2 layers, 2 oz copper, parts on both sides |
+| Board | 31 x 20 mm, 4 layers (L2 GND, L3 VBAT), 2 oz outer, parts on both sides |
 | Bulk caps | 4 x 220 uF 16 V on the battery leads (off-board, in the BOM) |
 
 ## Pin map (both channels, from AM32 `Inc/targets.h`)
@@ -126,23 +126,19 @@ LCSC stock checked (2026-11-21):
 - Other resistor values: the UNI-ROYAL 0201WMF ±1 % series covers 1 R-10 M
   (25 V), so they are in stock.
 
-**Routing: not closed.**
+**Routing: not closed at 31 x 20 mm** (board widened from 28 mm; 4.7 R 0201
+gate series resistors added back, 12 parts).
 
-- **Freerouting 2.5.0** (`tools/route_pcb.py`, run with router keep-outs
-  over the power copper) plateaus at 84-87 unrouted. The fixed-via
-  violations are fixed, but it will not use the inner planes or ignore the
-  GND / VBAT net class.
-- **Own grid router** (`tools/gridroute.py`, 0.05 mm grid, outer layers plus
-  vias, KiCad shapes as obstacles) routes the rest but leaves about 80
-  connections. Almost all are at the MCU and DRV8300 pins.
-- **Cause:** on the bottom, the fine-pitch pin rows, the support parts and
-  the GND / VBAT fanout vias leave only a 0.15-0.25 mm channel round each
-  MCU and driver. The six INH/INL lines, gates, BST and SH cannot all get
-  out.
+- Freerouting 2.5.0: 149 unrouted after 18 passes.
+- `tools/gridroute.py` (greedy grid router): about 86 connections fail.
+- `tools/negroute.py` (negotiated-congestion rip-up/reroute): stuck at 67
+  overlapping nets and 4 unroutable for 5 rounds with no improvement.
+- The conflicts are all on the bottom round each DRV8300: gate (GHx_D /
+  GLx_D), bootstrap (BSTx), INH/INL and phase-sense nets cross between the
+  driver pins, the gate escape vias and the bootstrap caps.
 
-The committed board is the unrouted placement. To close it, either move the
-MCU support parts to the top, or move the MCUs to the top right (the buck
-area) so each driver and MCU sits on its own face.
+The committed board is the unrouted placement (DRC shows only unconnected
+items).
 
 ## Files
 
