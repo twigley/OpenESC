@@ -29,7 +29,7 @@ FREEROUTING = os.path.expandvars(r"%LOCALAPPDATA%\freerouting\freerouting.exe")
 
 W, H = 31.0, 20.0
 WIDEN = 3.0                    # 28 -> 31 mm: everything right of x = 20.8 moves right
-LAYERS = 4                     # L1 signal+power, L2 GND, L3 VBAT (+GND), L4 signal+power
+LAYERS = 6                     # L1 parts/power, L2 GND, L3/L4 signal, L5 VBAT (+GND), L6 parts/power
 OX, OY = 100.0, 100.0
 mm = pcbnew.FromMM
 def P(x, y): return pcbnew.VECTOR2I(mm(OX + x), mm(OY + y))
@@ -135,7 +135,7 @@ def load_fp(fpid):
 def main():
     board = pcbnew.NewBoard(PCB)
     board.SetCopperLayerCount(LAYERS)
-    for L in (pcbnew.In1_Cu, pcbnew.In2_Cu):     # plane layers: the router stays off them
+    for L in (pcbnew.In1_Cu, pcbnew.In4_Cu):     # plane layers: the router stays off them
         board.SetLayerType(L, pcbnew.LT_POWER)
     nets = {}
     def net(n):
@@ -294,10 +294,10 @@ def power_copper(board, net):
         # LS bus under the FET row, from the shunt to the last FET
         add_zone(board, net(f"M{m}_LS"), F, rect(5.6, yy(7.45), 20.3, yy(9.65)), prio=4)
         add_via(board, net(f"M{m}_LS"), 5.95, yy(9.25))      # LS tap for the INA186 Kelvin lead
-    # inner planes: L2 (In1) solid GND, L3 (In2) VBAT over the power area, GND beyond
+    # inner planes: L2 (In1) solid GND, L5 (In4) VBAT over the power area, GND beyond; L3/L4 signal
     make_zone(board, net("GND"), pcbnew.In1_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, W, H)], 1, False)
-    make_zone(board, net("VBAT"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, 24.0 + WIDEN, H)], 2, False)
-    make_zone(board, net("GND"), pcbnew.In2_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(24.4 + WIDEN, 0, W, H)], 1, False)
+    make_zone(board, net("VBAT"), pcbnew.In4_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(0, 0, 24.0 + WIDEN, H)], 2, False)
+    make_zone(board, net("GND"), pcbnew.In4_Cu, [(mm(OX + x), mm(OY + y)) for x, y in rect(24.4 + WIDEN, 0, W, H)], 1, False)
     # top GND at BAT- and the shunt ground ends
     add_zone(board, net("GND"), F, rect(0.3, 6.1, 3.1, 13.9), prio=3)
     # via arrays: BAT+ to bottom VBAT, BAT- to bottom GND
@@ -312,11 +312,15 @@ STACKUP = """		(stackup
 			(layer "F.Paste" (type "Top Solder Paste"))
 			(layer "F.Mask" (type "Top Solder Mask") (thickness 0.01))
 			(layer "F.Cu" (type "copper") (thickness 0.07))
-			(layer "dielectric 1" (type "prepreg") (thickness 0.2104) (material "FR4") (epsilon_r 4.4) (loss_tangent 0.02))
+			(layer "dielectric 1" (type "prepreg") (thickness 0.0764) (material "FR4") (epsilon_r 4.05) (loss_tangent 0.02))
 			(layer "In1.Cu" (type "copper") (thickness 0.0152))
-			(layer "dielectric 2" (type "core") (thickness 1.065) (material "FR4") (epsilon_r 4.6) (loss_tangent 0.02))
+			(layer "dielectric 2" (type "core") (thickness 0.5) (material "FR4") (epsilon_r 4.6) (loss_tangent 0.02))
 			(layer "In2.Cu" (type "copper") (thickness 0.0152))
-			(layer "dielectric 3" (type "prepreg") (thickness 0.2104) (material "FR4") (epsilon_r 4.4) (loss_tangent 0.02))
+			(layer "dielectric 3" (type "prepreg") (thickness 0.2) (material "FR4") (epsilon_r 4.4) (loss_tangent 0.02))
+			(layer "In3.Cu" (type "copper") (thickness 0.0152))
+			(layer "dielectric 4" (type "core") (thickness 0.5) (material "FR4") (epsilon_r 4.6) (loss_tangent 0.02))
+			(layer "In4.Cu" (type "copper") (thickness 0.0152))
+			(layer "dielectric 5" (type "prepreg") (thickness 0.0764) (material "FR4") (epsilon_r 4.05) (loss_tangent 0.02))
 			(layer "B.Cu" (type "copper") (thickness 0.07))
 			(layer "B.Mask" (type "Bottom Solder Mask") (thickness 0.01))
 			(layer "B.Paste" (type "Bottom Solder Paste"))
@@ -326,7 +330,7 @@ STACKUP = """		(stackup
 		)
 """
 def set_stackup(path):
-    """4-layer 1.6 mm (JLC04161H-7628 style), 2 oz outer / 0.5 oz inner. pcbnew's
+    """6-layer about 1.6 mm (JLC 6-layer style; dielectrics approximate), 2 oz outer / 0.5 oz inner. pcbnew's
     Python API can't edit the stackup, so it is written into (setup)."""
     s = open(path, encoding="utf8").read()
     s = re.sub(r"\n\t\t\(stackup\n.*?\n\t\t\)\n", "\n", s, flags=re.S)

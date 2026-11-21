@@ -99,12 +99,13 @@ class Router:
                 if nn in prev: continue
                 if not g.ok_trk(L, kk, nid) and nn not in goal: continue
                 if di and dj and (not g.ok_trk(L, j * nx + ii, nid) or not g.ok_trk(L, jj * nx + i, nid)): continue
-                nc = c + w * (1.0 if L == F else 1.03) + self.cost(net, L, kk)
+                nc = c + w * (1.0 if L in (F, B) else 1.02) + self.cost(net, L, kk)
                 if nc < best.get(nn, 1e18):
                     best[nn] = nc; heapq.heappush(pq, (nc + h(ii, jj), nc, nn, node))
             if g.ok_via(k, nid) and g.edge_ok(i, j, gr.VIA_D / 2):
-                L2 = B if L == F else F; nn = (L2, k)
-                if nn not in prev and g.ok_trk(L2, k, nid):
+                for L2 in gr.LAYERS:
+                    nn = (L2, k)
+                    if L2 == L or nn in prev or not g.ok_trk(L2, k, nid): continue
                     nc = c + VIA_COST + self.cost(net, L2, k) + self.cost(net, L, k)
                     if nc < best.get(nn, 1e18):
                         best[nn] = nc; heapq.heappush(pq, (nc + h(i, j), nc, nn, node))

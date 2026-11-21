@@ -29,7 +29,8 @@ G = 0.05                       # grid, mm
 CLR = 0.13                     # clearance used everywhere (netclass minimum), mm
 VIA_D, VIA_DRILL = 0.4, 0.2
 F, B = pcbnew.F_Cu, pcbnew.B_Cu
-LAYERS = (F, B)
+I2, I3 = pcbnew.In2_Cu, pcbnew.In3_Cu
+LAYERS = (F, I2, I3, B)          # 6-layer board: L3/L4 are signal layers
 mm = pcbnew.FromMM
 SKIP = {"GND", "VBAT"}         # plane nets: done by fanout + planes
 WIDTH = {"Gate": 0.25, "Power": 0.3}
@@ -174,8 +175,8 @@ def astar(g, nid, starts, goal, width):
                 heapq.heappush(pq, (nc + h(ii, jj), nc, L, kk, (L, k)))
         # via
         if g.ok_via(k, nid) and g.edge_ok(i, j, VIA_D / 2):
-            L2 = B if L == F else F
-            if g.ok_trk(L2, k, nid):
+            for L2 in LAYERS:
+                if L2 == L or not g.ok_trk(L2, k, nid): continue
                 nc = c + 14
                 if nc < best.get((L2, k), 1e18):
                     best[(L2, k)] = nc

@@ -17,7 +17,7 @@ routing: see [PCB status](#pcb-status). Not built. Part numbers marked
 | Battery | 2S Li-ion, 6.0 to 8.4 V |
 | Current | about 10-12 A per motor, limit set in AM32 |
 | Firmware | AM32, stock target `RR_ROBOT_DUAL_ESC_F421`, flashed on both MCUs; no `USE_INVERTED_*` |
-| Board | 31 x 20 mm, 4 layers (L2 GND, L3 VBAT), 2 oz outer, parts on both sides |
+| Board | 31 x 20 mm, 6-layer trial (L2 GND, L3/L4 signal, L5 VBAT), parts on both sides |
 | Bulk caps | 4 x 220 uF 16 V on the battery leads (off-board, in the BOM) |
 
 ## Pin map (both channels, from AM32 `Inc/targets.h`)
@@ -126,19 +126,24 @@ LCSC stock checked (2026-11-21):
 - Other resistor values: the UNI-ROYAL 0201WMF ±1 % series covers 1 R-10 M
   (25 V), so they are in stock.
 
-**Routing: not closed at 31 x 20 mm** (board widened from 28 mm; 4.7 R 0201
-gate series resistors added back, 12 parts).
+**Routing: not closed.**
 
-- Freerouting 2.5.0: 149 unrouted after 18 passes.
-- `tools/gridroute.py` (greedy grid router): about 86 connections fail.
-- `tools/negroute.py` (negotiated-congestion rip-up/reroute): stuck at 67
-  overlapping nets and 4 unroutable for 5 rounds with no improvement.
-- The conflicts are all on the bottom round each DRV8300: gate (GHx_D /
-  GLx_D), bootstrap (BSTx), INH/INL and phase-sense nets cross between the
-  driver pins, the gate escape vias and the bootstrap caps.
+- **31 x 20 mm, 4 layers:** Freerouting leaves 149 unrouted, `gridroute.py`
+  about 86, `negroute.py` 67 overlapping nets.
+- **6-layer trial at 31 x 20** (the committed board): L1 / L6 parts and
+  power, L2 GND, L3 / L4 signal, L5 VBAT. `negroute.py` gets down to 53-55
+  overlapping nets (plus 4 unroutable) and then plateaus.
+- **Remaining conflicts:** fine-pitch escape round each DRV8300 and MCU.
+  The most crowded spot is the driver pin row nearest the board edge, where
+  several pins must escape through room for one track. Extra inner layers
+  only help once each pin can drop to them, which needs via-in-pad / HDI
+  vias (0.3 / 0.15 mm or smaller) at the 0.5 mm driver and 0.4 mm MCU pitch,
+  or a placement with no pin row facing the edge.
+- **JLC 6-layer, 2 oz outer:** available, but the minimum trace / space is
+  then 0.16 mm. These rules use 0.13 mm, so 2 oz outer would need wider
+  spacing at the QFN escapes (or 1 oz outer).
 
-The committed board is the unrouted placement (DRC shows only unconnected
-items).
+The committed board is the unrouted 6-layer placement.
 
 ## Files
 
