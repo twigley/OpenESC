@@ -311,7 +311,7 @@ STACKUP = """		(stackup
 			(layer "F.SilkS" (type "Top Silk Screen"))
 			(layer "F.Paste" (type "Top Solder Paste"))
 			(layer "F.Mask" (type "Top Solder Mask") (thickness 0.01))
-			(layer "F.Cu" (type "copper") (thickness 0.07))
+			(layer "F.Cu" (type "copper") (thickness 0.035))
 			(layer "dielectric 1" (type "prepreg") (thickness 0.0764) (material "FR4") (epsilon_r 4.05) (loss_tangent 0.02))
 			(layer "In1.Cu" (type "copper") (thickness 0.0152))
 			(layer "dielectric 2" (type "core") (thickness 0.5) (material "FR4") (epsilon_r 4.6) (loss_tangent 0.02))
@@ -321,7 +321,7 @@ STACKUP = """		(stackup
 			(layer "dielectric 4" (type "core") (thickness 0.5) (material "FR4") (epsilon_r 4.6) (loss_tangent 0.02))
 			(layer "In4.Cu" (type "copper") (thickness 0.0152))
 			(layer "dielectric 5" (type "prepreg") (thickness 0.0764) (material "FR4") (epsilon_r 4.05) (loss_tangent 0.02))
-			(layer "B.Cu" (type "copper") (thickness 0.07))
+			(layer "B.Cu" (type "copper") (thickness 0.035))
 			(layer "B.Mask" (type "Bottom Solder Mask") (thickness 0.01))
 			(layer "B.Paste" (type "Bottom Solder Paste"))
 			(layer "B.SilkS" (type "Bottom Silk Screen"))
@@ -330,7 +330,7 @@ STACKUP = """		(stackup
 		)
 """
 def set_stackup(path):
-    """6-layer about 1.6 mm (JLC 6-layer style; dielectrics approximate), 2 oz outer / 0.5 oz inner. pcbnew's
+    """6-layer about 1.6 mm (JLC 6-layer style; dielectrics approximate), 1 oz outer (0.13 mm spacing at the QFN escapes) / 0.5 oz inner. pcbnew's
     Python API can't edit the stackup, so it is written into (setup)."""
     s = open(path, encoding="utf8").read()
     s = re.sub(r"\n\t\t\(stackup\n.*?\n\t\t\)\n", "\n", s, flags=re.S)
@@ -362,8 +362,8 @@ def write_rules():
     ns["netclass_patterns"] = [dict(netclass=c, pattern=p) for c, p in PATTERNS]
     ns["meta"] = {"version": 4}
     ds = pro.setdefault("board", {}).setdefault("design_settings", {})
-    ds.setdefault("rules", {}).update(dict(min_clearance=0.13, min_track_width=0.15, min_via_diameter=0.4,
-        min_through_hole_diameter=0.2, min_via_annular_width=0.1, min_copper_edge_clearance=0.3,
+    ds.setdefault("rules", {}).update(dict(min_clearance=0.13, min_track_width=0.15, min_via_diameter=0.3,
+        min_through_hole_diameter=0.15, min_via_annular_width=0.075, min_copper_edge_clearance=0.3,
         min_hole_to_hole=0.25, min_hole_clearance=0.2, min_connection=0.12, solder_mask_to_copper_clearance=0.0))
     pro.setdefault("meta", {"filename": "dual_esc.kicad_pro", "version": 3})
     json.dump(pro, open(PRO, "w"), indent=2)

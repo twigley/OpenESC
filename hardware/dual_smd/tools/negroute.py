@@ -111,8 +111,40 @@ class Router:
                         best[nn] = nc; heapq.heappush(pq, (nc + h(i, j), nc, nn, node))
         return None
 
+VIP = {}     # pad (ref, number) -> via-in-pad position
+def via_in_pads(board, refs=("U101", "U102", "U201", "U202"), d=0.3, drill=0.15):
+    """Filled via-in-pad on every signal pin of the drivers and MCUs (JLC multilayer
+    minimum 0.15 mm hole / 0.25 mm via, epoxy filled and capped). Vias sit 0.2 mm
+    from the pad centre along its length, alternating ends pin to pin, so adjacent
+    vias at 0.4 / 0.5 mm pitch keep clearance."""
+    n = 0
+    for ref in refs:
+        fp = board.FindFootprintByReference(ref)
+        for p in fp.Pads():
+            net = p.GetNetname()
+            if not net or net in ("GND", "VBAT"): continue
+            bb = p.GetBoundingBox(); c = p.GetPosition()
+            num = int(p.GetNumber()) if p.GetNumber().isdigit() else 0
+            s = 1 if num % 2 else -1
+            off = gr.mm(0.2) * s
+            v = c + (pcbnew.VECTOR2I(off, 0) if bb.GetWidth() > bb.GetHeight() else pcbnew.VECTOR2I(0, off))
+            if not route_pcb.item_clear(board, v, d / 2, 0.13, net, (F, B), zones=False):
+                v = c - (v - c)
+                if not route_pcb.item_clear(board, v, d / 2, 0.13, net, (F, B), zones=False):
+                    print("no via-in-pad for", ref, p.GetNumber()); continue
+            via = pcbnew.PCB_VIA(board); via.SetPosition(v); via.SetWidth(gr.mm(d)); via.SetDrill(gr.mm(drill))
+            via.SetNet(p.GetNet()); board.Add(via)
+            VIP[(ref, p.GetNumber())] = v; n += 1
+    return n
+
 def pad_cells(g, p):
     out = set()
+    v = VIP.get((p.GetParentFootprint().GetReference(), p.GetNumber()))
+    if v is not None:                                  # the in-pad via reaches every layer
+        i0 = int((v.x - g.x0) / gr.mm(G)); j0 = int((v.y - g.y0) / gr.mm(G))
+        for di in range(-2, 3):
+            for dj in range(-2, 3):
+                for L in gr.LAYERS: out.add((L, (j0 + dj) * g.nx + i0 + di))
     for L in gr.LAYERS:
         if not p.IsOnLayer(L): continue
         bb = p.GetBoundingBox(); sh = p.GetEffectiveShape(L)
@@ -129,10 +161,16 @@ def main():
     board = pcbnew.LoadBoard(gr.PCB)
     route_pcb.fill(board)
     print("fanout:", route_pcb.fanout(board), flush=True)
+    print("via-in-pad:", via_in_pads(board), flush=True)
     route_pcb.fill(board)
     g = gr.Grid(board)
     for p in board.GetPads(): g.add_item(p)
-    for t in board.GetTracks(): g.add_item(t)
+    vset = set((v.x, v.y) for v in VIP.values())
+    for t in board.GetTracks():
+        if isinstance(t, pcbnew.PCB_VIA) and (t.GetPosition().x, t.GetPosition().y) in vset:
+            g.is_pad = True; g.add_item(t); g.is_pad = False   # part of its pad, not seed copper
+        else:
+            g.add_item(t)
     for z in board.Zones():
         if not z.GetIsRuleArea() and (z.IsOnLayer(F) or z.IsOnLayer(B)): g.add_zone(z)
     nets = {}

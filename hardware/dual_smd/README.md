@@ -140,8 +140,19 @@ LCSC stock checked (2026-11-21):
   vias (0.3 / 0.15 mm or smaller) at the 0.5 mm driver and 0.4 mm MCU pitch,
   or a placement with no pin row facing the edge.
 - **JLC 6-layer, 2 oz outer:** available, but the minimum trace / space is
-  then 0.16 mm. These rules use 0.13 mm, so 2 oz outer would need wider
-  spacing at the QFN escapes (or 1 oz outer).
+  then 0.16 mm. The last trial therefore uses 1 oz outer copper (0.13 mm
+  spacing at the QFN escapes). At 1 oz the power zones carry about half the
+  current of 2 oz, so the 10-12 A paths would need wider copper or tinned /
+  bus-barred phase and battery paths.
+- **Last automated attempt (via-in-pad):** filled vias of 0.3 / 0.15 mm on
+  the driver and MCU signal pins, using JLC's multilayer minimum of 0.15 mm
+  hole / 0.25 mm via with epoxy fill and cap (JLC PCB capabilities page; one
+  JLC blog gives 0.20 mm as the minimum hole for via-in-pad).
+  - 47 pins got one. 31 could not, because a top-side part (phase pad,
+    LDO, pads) sits directly above the pin.
+  - `negroute.py` then plateaued at 59 overlapping nets plus 1 unroutable.
+  - Automated routing stopped there. The next step is interactive routing,
+    or a placement where the drivers and MCUs have nothing above them.
 
 The committed board is the unrouted 6-layer placement.
 
